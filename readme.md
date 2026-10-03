@@ -27,7 +27,7 @@
 
 ### نصب آفلاین از طریق فایل VSIX:
 
-1. فایل `rtl-cursor-1.0.9.vsix` را دانلود کنید.
+1. فایل `releases/rtl-cursor-1.0.9.vsix` را دانلود کنید (یا از [Releases گیت‌هاب](https://github.com/Fusoft-External/rtl-cursor/releases)).
 2. در ادیتور (Cursor یا Antigravity IDE) کلیدهای **`Ctrl + Shift + P`** را فشار دهید.
 3. دستور **`Extensions: Install from VSIX...`** را جستجو و فایل VSIX را انتخاب کنید.
 4. روی دکمهٔ نوار وضعیت پایین صفحه کلیک کرده یا دستور **`RTL Cursor: Enable`** را اجرا نمایید.

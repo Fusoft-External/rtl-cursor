@@ -1,5 +1,6 @@
 node_modules/
 *.vsix
+!releases/*.vsix
 .vsixmanifest
 **/*.map
 .DS_Store
