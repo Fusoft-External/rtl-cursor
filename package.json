@@ -2,7 +2,7 @@
 	"name": "rtl-cursor",
 	"displayName": "RTL Cursor & Antigravity",
 	"description": "Smart RTL and Vazirmatn font for Cursor and Antigravity IDE (Chat, Agent, Plan, Canvas, and Markdown). RTL text is right-aligned; code and LTR text stay left-to-right.",
-	"version": "1.0.8",
+	"version": "1.0.9",
 	"publisher": "fusoft",
 	"license": "Apache-2.0",
 	"icon": "resources/icon.png",

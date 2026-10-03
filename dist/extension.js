@@ -417,20 +417,33 @@ function updateStatusBar(state) {
   }
   statusBarItem.show();
 }
-function quoteForCmd(value) {
-  return `"${String(value).replace(/"/g, '""')}"`;
-}
 function scheduleEditorRelaunch() {
   const exePath = process.execPath;
   const delayMs = 2e3;
   try {
     if (process.platform === "win32") {
-      const cmd = `ping -n ${Math.max(2, Math.ceil(delayMs / 1e3) + 1)} 127.0.0.1 >nul & start "" ${quoteForCmd(exePath)}`;
-      child_process.spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", cmd], {
-        detached: true,
-        stdio: "ignore",
-        windowsHide: true
-      }).unref();
+      // Hidden PowerShell delay + relaunch (no visible cmd / ping window).
+      const psScript = `Start-Sleep -Milliseconds ${delayMs}; Start-Process -LiteralPath '${String(exePath).replace(/'/g, "''")}'`;
+      const encoded = Buffer.from(psScript, "utf16le").toString("base64");
+      child_process.spawn(
+        "powershell.exe",
+        [
+          "-NoLogo",
+          "-NoProfile",
+          "-NonInteractive",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-WindowStyle",
+          "Hidden",
+          "-EncodedCommand",
+          encoded
+        ],
+        {
+          detached: true,
+          stdio: "ignore",
+          windowsHide: true
+        }
+      ).unref();
       return;
     }
     const shellCmd = `sleep ${Math.max(1, Math.ceil(delayMs / 1e3))}; exec ${JSON.stringify(exePath)}`;
