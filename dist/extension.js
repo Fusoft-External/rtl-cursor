@@ -41,8 +41,18 @@ var pathUser = __toESM(require("path"));
 var child_process = require("child_process");
 var WANT_ENABLED_KEY = "rtlCursor.enabled";
 var relaunchInFlight = false;
+var WATCH_RUN_VALUE = "RtlCursorWatch";
 function enabledFlagPath() {
   return pathUser.join(os.homedir(), ".rtl-cursor-enabled");
+}
+function watchStateDir() {
+  return pathUser.join(os.homedir(), ".rtl-cursor");
+}
+function watchScriptPath() {
+  return pathUser.join(watchStateDir(), "rtl-cursor-watch.ps1");
+}
+function watchLoaderCachePath() {
+  return pathUser.join(watchStateDir(), "rtl-cursor-loader.cjs");
 }
 function readWantEnabled(context) {
   const stored = context.globalState.get(WANT_ENABLED_KEY);
@@ -417,6 +427,85 @@ function updateStatusBar(state) {
   }
   statusBarItem.show();
 }
+function ensureWatchStateDir() {
+  const dir = watchStateDir();
+  if (!fs3.existsSync(dir)) {
+    fs3.mkdirSync(dir, { recursive: true });
+  }
+  return dir;
+}
+function installBackgroundWatch(extensionPath) {
+  if (process.platform !== "win32") {
+    return;
+  }
+  try {
+    ensureWatchStateDir();
+    const srcScript = pathUser.join(extensionPath, "resources", "rtl-cursor-watch.ps1");
+    const srcLoader = pathUser.join(extensionPath, "resources", LOADER_FILENAME);
+    if (fs3.existsSync(srcScript)) {
+      fs3.copyFileSync(srcScript, watchScriptPath());
+    }
+    if (fs3.existsSync(srcLoader)) {
+      fs3.copyFileSync(srcLoader, watchLoaderCachePath());
+    }
+    const script = watchScriptPath();
+    if (!fs3.existsSync(script)) {
+      return;
+    }
+    const runCmd = `powershell.exe -NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "${script.replace(/"/g, '\\"')}"`;
+    child_process.spawn(
+      "reg",
+      ["add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", WATCH_RUN_VALUE, "/t", "REG_SZ", "/d", runCmd, "/f"],
+      { detached: true, stdio: "ignore", windowsHide: true }
+    ).unref();
+    child_process.spawn(
+      "powershell.exe",
+      [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-WindowStyle",
+        "Hidden",
+        "-File",
+        script
+      ],
+      { detached: true, stdio: "ignore", windowsHide: true }
+    ).unref();
+  } catch (err) {
+    console.error("[RTL Cursor] failed to install background watch:", err);
+  }
+}
+function stopBackgroundWatch() {
+  if (process.platform !== "win32") {
+    return;
+  }
+  try {
+    child_process.spawn(
+      "reg",
+      ["delete", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", WATCH_RUN_VALUE, "/f"],
+      { detached: true, stdio: "ignore", windowsHide: true }
+    ).unref();
+    const pidFile = pathUser.join(watchStateDir(), "watch.pid");
+    if (fs3.existsSync(pidFile)) {
+      const pid = Number(String(fs3.readFileSync(pidFile, "utf8")).trim());
+      if (pid > 0) {
+        child_process.spawn("taskkill", ["/PID", String(pid), "/T", "/F"], {
+          detached: true,
+          stdio: "ignore",
+          windowsHide: true
+        }).unref();
+      }
+      try {
+        fs3.unlinkSync(pidFile);
+      } catch {
+      }
+    }
+  } catch (err) {
+    console.error("[RTL Cursor] failed to stop background watch:", err);
+  }
+}
 function scheduleEditorRelaunch() {
   const exePath = process.execPath;
   const delayMs = 2e3;
@@ -519,6 +608,7 @@ async function enableCommand(context, options) {
     copyLoader(outDir, context.extensionPath);
     applyPatch(mainJsPath);
     await writeWantEnabled(context, true);
+    installBackgroundWatch(context.extensionPath);
     updateStatusBar("on");
     setupFileWatcher(mainJsPath, context);
     await offerRestart(
@@ -546,6 +636,7 @@ async function disableCommand(context) {
   try {
     removePatch(validation.mainJsPath);
     await writeWantEnabled(context, false);
+    stopBackgroundWatch();
     if (fileWatcher) {
       fileWatcher.close();
       fileWatcher = void 0;
@@ -658,6 +749,9 @@ function activate(context) {
       copyLoader(getAppOutDir(), context.extensionPath);
     } catch {
     }
+  }
+  if (readWantEnabled(context)) {
+    installBackgroundWatch(context.extensionPath);
   }
   updateStatusBar(state);
   const autoReapply = vscode2.workspace.getConfiguration("rtlCursor").get("autoReapply", true);

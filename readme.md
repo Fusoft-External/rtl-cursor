@@ -27,7 +27,7 @@
 
 ### نصب آفلاین از طریق فایل VSIX:
 
-1. فایل `releases/rtl-cursor-1.0.9.vsix` را دانلود کنید (یا از [Releases گیت‌هاب](https://github.com/Fusoft-External/rtl-cursor/releases)).
+1. فایل `releases/rtl-cursor-1.0.10.vsix` را دانلود کنید (یا از [Releases گیت‌هاب](https://github.com/Fusoft-External/rtl-cursor/releases)).
 2. در ادیتور (Cursor یا Antigravity IDE) کلیدهای **`Ctrl + Shift + P`** را فشار دهید.
 3. دستور **`Extensions: Install from VSIX...`** را جستجو و فایل VSIX را انتخاب کنید.
 4. روی دکمهٔ نوار وضعیت پایین صفحه کلیک کرده یا دستور **`RTL Cursor: Enable`** را اجرا نمایید.
@@ -50,11 +50,17 @@
 
 - **ری‌استارت خودکار:** با `rtlCursor.autoRelaunch` (پیش‌فرض روشن) بعد از Enable / Disable / آپدیت ادیتور، Cursor خودش بسته و دوباره باز می‌شود.
 - **ری‌استارت دستی:** اگر `rtlCursor.autoRelaunch` را خاموش کنید، مثل قبل باید از `File → Exit` استفاده کنید.
-- **آیا بعد از آپدیت Cursor می‌شود بدون بستن برنامه کار کرد؟** خیرِ کامل — لودر RTL داخل پروسهٔ اصلی Electron (`main.js`) لود می‌شود؛ بعد از آپدیت Cursor این پچ پاک می‌شود و برای اعمال دوباره باید پروسه یک‌بار از نو شروع شود. ولی با `rtlCursor.autoReapply` + `rtlCursor.autoRelaunch` این کار **خودکار** است و لازم نیست خودتان Exit کنید.
+- **آیا بعد از آپدیت Cursor می‌شود بدون بستن برنامه کار کرد؟** خیرِ کامل — لودر RTL داخل پروسهٔ اصلی Electron (`main.js`) لود می‌شود؛ بعد از آپدیت Cursor این پچ پاک می‌شود و برای اعمال دوباره باید پروسه یک‌بار از نو شروع شود. ولی با `rtlCursor.autoReapply` + `rtlCursor.autoRelaunch` و **watch پس‌زمینه** (ویندوز) این کار **خودکار** است؛ حتی اگر فقط Agent Window باز باشد و IDE را باز نکنید.
+- **Watch پس‌زمینه (ویندوز):** بعد از Enable یک اسکریپت مخفی در `%USERPROFILE%\.rtl-cursor\` نصب می‌شود و `main.js` را پایش می‌کند؛ اگر بعد از آپدیت پچ پاک شده باشد بدون باز کردن IDE دوباره اعمال و در صورت نیاز Cursor را ری‌استارت می‌کند.
 - **خطای عدم دسترسی (Permission denied):** ادیتور را یک‌بار با گزینهٔ **Run as administrator** باز کرده و دستور Enable را اجرا کنید.
 - **بررسی لاگ‌ها:** در صورت نیاز به بررسی عملکرد لودر، فایل لاگ در مسیر `%USERPROFILE%\rtl-cursor.log` ذخیره می‌گردد.
 
 ---
+
+## تغییرات نسخه ۱.۰.۱۰
+
+- Watch پس‌زمینه روی ویندوز: بعد از آپدیت Cursor بدون باز کردن IDE (مثلاً فقط Agent Window) پچ RTL دوباره اعمال می‌شود.
+- فعال‌سازی زودتر افزونه (`activationEvents: *`).
 
 ## تغییرات نسخه ۱.۰.۹
 
