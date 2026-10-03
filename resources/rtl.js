@@ -560,6 +560,42 @@
             flex-direction: row !important;
         }
 
+        /* Plan checklist in Agent/Plan (ui-todo-*) and plan-file todo rows */
+        .ui-todo-list[dir="rtl"],
+        .ui-todo-list-container[dir="rtl"],
+        .ui-todo-item[dir="rtl"],
+        .ui-todo-item__content[dir="rtl"],
+        .plan-todo__row[dir="rtl"],
+        .plan-todo__row[dir="rtl"] .plan-list-row__text,
+        .plan-todo__row[dir="rtl"] textarea,
+        textarea.plan-list-row__text[dir="rtl"],
+        .plan-todos-section[dir="rtl"],
+        .plan-todos-section__phase[dir="rtl"],
+        .plan-todos-section__phase-list[dir="rtl"],
+        .plan-todos-section__phase-header[dir="rtl"] {
+            direction: rtl !important;
+            text-align: right !important;
+            unicode-bidi: isolate !important;
+        }
+
+        .ui-todo-item[dir="rtl"],
+        .plan-todo__row[dir="rtl"],
+        .plan-list-row.plan-todo__row[dir="rtl"] {
+            display: flex !important;
+            flex-direction: row !important;
+            justify-content: flex-start !important;
+        }
+
+        .ui-todo-item[dir="ltr"],
+        .ui-todo-item__content[dir="ltr"],
+        .plan-todo__row[dir="ltr"],
+        .plan-todo__row[dir="ltr"] .plan-list-row__text,
+        textarea.plan-list-row__text[dir="ltr"] {
+            direction: ltr !important;
+            text-align: left !important;
+            unicode-bidi: isolate !important;
+        }
+
         .markdown-root p,
         .markdown-root li,
         .markdown-root h1,
@@ -897,6 +933,13 @@
         '.plan-todos-section__phase-list',
         '.plan-list-row',
         '.plan-list-row__text',
+        '.plan-todo__row',
+        '.plan-todo__content--expandable',
+        '.plan-todos-section__phase-header',
+        '.ui-todo-list-container',
+        '.ui-todo-list',
+        '.ui-todo-item',
+        '.ui-todo-item__content',
         '.composer-create-plan-todos',
         '.composer-create-plan-todos-list',
         '.composer-create-plan-todo-item',
@@ -1454,12 +1497,151 @@
         } catch (e) {}
     }
 
+    var TODO_CONTAINER_SELECTOR = '.ui-todo-list, .ui-todo-list-container, .plan-todos-section, .plan-todos-section__phase, .plan-todos-section__phase-list';
+    var TODO_LEAF_SELECTOR = '.ui-todo-item, .ui-todo-item__content, .plan-todo__row, .plan-list-row.plan-todo__row, .plan-list-row__text, .plan-todo__content--expandable, .plan-todos-section__phase-header';
+
+    function paintTextDir(el, dir) {
+        if (!el || !el.style) return;
+        if (el.getAttribute('dir') !== dir) el.setAttribute('dir', dir);
+        el.style.setProperty('direction', dir, 'important');
+        el.style.setProperty('text-align', dir === 'rtl' ? 'right' : 'left', 'important');
+        el.style.setProperty('unicode-bidi', 'isolate', 'important');
+    }
+
+    function todoContainerDir(el) {
+        var items = el.querySelectorAll('.ui-todo-item, .plan-todo__row');
+        if (!items.length) return getTextDir(getElementText(el));
+        var rtl = 0;
+        var ltr = 0;
+        for (var i = 0; i < items.length; i++) {
+            if (getTextDir(getElementText(items[i])) === 'rtl') rtl++;
+            else ltr++;
+        }
+        return rtl >= ltr && rtl > 0 ? 'rtl' : 'ltr';
+    }
+
+    function forceTodoLists(root) {
+        if (!root || !root.querySelectorAll) return;
+        try {
+            var containers = root.querySelectorAll(TODO_CONTAINER_SELECTOR);
+            for (var i = 0; i < containers.length; i++) {
+                paintTextDir(containers[i], todoContainerDir(containers[i]));
+            }
+            var leaves = root.querySelectorAll(TODO_LEAF_SELECTOR);
+            for (var j = 0; j < leaves.length; j++) {
+                var el = leaves[j];
+                if (el.closest && el.closest('.plan-todo__status-indicator, .plan-todo__trailing, .plan-todo__assignment')) continue;
+                var dir = getTextDir(getElementText(el));
+                paintTextDir(el, dir);
+                if (el.matches && el.matches('.ui-todo-item, .plan-todo__row') && el.firstElementChild) {
+                    paintTextDir(el.firstElementChild, dir);
+                }
+            }
+        } catch (e) {}
+    }
+
+    function planCardScope(card) {
+        var scope = card.getRootNode ? card.getRootNode() : document;
+        return scope && scope.getElementById ? scope : document;
+    }
+
+    function planTodoContentSpan(row) {
+        var kids = row.children;
+        if (!kids) return null;
+        for (var c = kids.length - 1; c >= 0; c--) {
+            if (kids[c].tagName === 'SPAN') return kids[c];
+        }
+        return null;
+    }
+
+    function applyPlanTodoList(list) {
+        var box = list.firstElementChild || list;
+        var rows = box.children;
+        if (!rows) return;
+        for (var i = 0; i < rows.length; i++) {
+            var row = rows[i];
+            var span = planTodoContentSpan(row);
+            if (!span) continue;
+            var dir = getTextDir(span.textContent || '');
+            paintTextDir(span, dir);
+            paintTextDir(row, dir);
+            row.style.setProperty('display', 'flex', 'important');
+            row.style.setProperty('flex-direction', 'row', 'important');
+            row.style.setProperty('justify-content', 'flex-start', 'important');
+            row.style.setProperty('align-items', 'flex-start', 'important');
+            span.style.setProperty('flex', '1 1 auto', 'important');
+            span.style.setProperty('min-width', '0', 'important');
+        }
+    }
+
+    function pinPlanCardTitlesLtr(card) {
+        if (card.hasAttribute('data-rtl-cursor-plan-card')) {
+            card.removeAttribute('data-rtl-cursor-plan-card');
+        }
+        var buttons = card.querySelectorAll('button[aria-label^="Plan progress:"]');
+        for (var b = 0; b < buttons.length; b++) {
+            var btn = buttons[b];
+            paintTextDir(btn, 'ltr');
+            btn.style.setProperty('justify-content', 'flex-start', 'important');
+            var kids = btn.children;
+            for (var k = 0; k < kids.length; k++) {
+                var kid = kids[k];
+                if (!kid || kid.tagName !== 'SPAN') continue;
+                if (kid.querySelector && kid.querySelector('svg')) continue;
+                var label = (kid.textContent || '').trim();
+                if (!label || label.indexOf('To-dos') !== -1 || getTextDir(label) === 'ltr') {
+                    paintTextDir(kid, 'ltr');
+                }
+            }
+        }
+        var icons = card.querySelectorAll('span[aria-hidden="true"]');
+        for (var i = 0; i < icons.length; i++) {
+            var iconSpan = icons[i];
+            if (iconSpan.closest && iconSpan.closest('button')) continue;
+            var headerContent = iconSpan.parentElement;
+            if (!headerContent || headerContent === card) continue;
+            paintTextDir(headerContent, 'ltr');
+            headerContent.style.setProperty('justify-content', 'flex-start', 'important');
+            var headerBar = headerContent.parentElement;
+            if (headerBar && headerBar !== card) {
+                paintTextDir(headerBar, 'ltr');
+                headerBar.style.setProperty('justify-content', 'flex-start', 'important');
+            }
+            var spans = headerContent.children;
+            for (var s = 0; s < spans.length; s++) {
+                if (spans[s].tagName !== 'SPAN' || spans[s] === iconSpan) continue;
+                paintTextDir(spans[s], 'ltr');
+            }
+            break;
+        }
+    }
+
+    function forcePlanExecutionCards(root) {
+        if (!root || !root.querySelectorAll) return;
+        try {
+            var cards = root.querySelectorAll('[data-plan-execution-card]');
+            for (var i = 0; i < cards.length; i++) {
+                var card = cards[i];
+                pinPlanCardTitlesLtr(card);
+                var buttons = card.querySelectorAll('button[aria-label^="Plan progress:"]');
+                for (var b = 0; b < buttons.length; b++) {
+                    var id = buttons[b].getAttribute('aria-controls');
+                    if (!id) continue;
+                    var list = planCardScope(card).getElementById(id);
+                    if (list) applyPlanTodoList(list);
+                }
+            }
+        } catch (e) {}
+    }
+
     function scanRoot(root) {
         try {
             clearAskQuestionChromeDir(root);
             markCanvasTextLeaves(root);
             var els = root.querySelectorAll(DIR_SELECTOR);
             applyDir(els);
+            forceTodoLists(root);
+            forcePlanExecutionCards(root);
         } catch (e) {}
     }
 

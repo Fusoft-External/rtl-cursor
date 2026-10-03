@@ -61,9 +61,11 @@
 - پشتیبانی **Cursor Canvas** (پیش‌نمایش داخل چت و تب Canvas) با تزریق RTL به فریم‌های محلی.
 - ارتقای لودر: `web-contents-created` + `did-frame-finish-load` + اسکن `framesInSubtree`.
 - فونت وزیرمتن و تشخیص جهت هوشمند روی متن‌های Canvas.
+- اطمینان از حضور کامل منطق To-do کارت Plan از نسخه ۱.۰.۷ در runtime.
 
 ## تغییرات نسخه ۱.۰.۷
 
+- افزودن راست‌چین هوشمند برای فهرست To-do کارت Plan (`ui-todo-*` / `plan-todo__row`).
 - **ری‌استارت خودکار** بعد از Enable / Disable و بعد از آپدیت ادیتور (`rtlCursor.autoRelaunch`).
 - دیگر برای اعمال پچ نیازی به Exit دستی نیست؛ ادیتور خودش باز می‌شود.
 
