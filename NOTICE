@@ -1,0 +1,9 @@
+RTL Cursor
+=======
+
+This product includes software derived from [Cursor RTL](https://github.com/motcke/cursor-ext-rtl)
+by Mordechai Alter (github.com/motcke), licensed under the Apache License, Version 2.0.
+
+The chat/agent RTL runtime in `resources/rtl.js` and the Electron loader pattern
+are adapted from that project. Modifications for this repository are copyright
+the RTL Cursor contributors.

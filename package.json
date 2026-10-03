@@ -1,0 +1,77 @@
+{
+	"name": "rtl-cursor",
+	"displayName": "RTL Cursor & Antigravity",
+	"description": "Smart RTL and Vazirmatn font for Cursor and Antigravity IDE (Chat, Agent, Plan, Canvas, and Markdown). RTL text is right-aligned; code and LTR text stay left-to-right.",
+	"version": "1.0.8",
+	"publisher": "fusoft",
+	"license": "Apache-2.0",
+	"icon": "resources/icon.png",
+	"engines": {
+		"vscode": "^1.85.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"keywords": [
+		"rtl",
+		"cursor",
+		"antigravity",
+		"chat",
+		"right-to-left",
+		"vazirmatn",
+		"persian",
+		"arabic",
+		"canvas"
+	],
+	"main": "./dist/extension.js",
+	"activationEvents": [
+		"onStartupFinished"
+	],
+	"contributes": {
+		"markdown.markdownItPlugins": true,
+		"markdown.previewStyles": [
+			"./resources/markdown-preview-rtl.css"
+		],
+		"commands": [
+			{
+				"command": "rtlCursor.toggle",
+				"title": "RTL Cursor: Toggle (روشن / خاموش)"
+			},
+			{
+				"command": "rtlCursor.enable",
+				"title": "RTL Cursor: Enable"
+			},
+			{
+				"command": "rtlCursor.disable",
+				"title": "RTL Cursor: Disable"
+			},
+			{
+				"command": "rtlCursor.status",
+				"title": "RTL Cursor: Check Status"
+			}
+		],
+		"configuration": {
+			"title": "RTL Cursor",
+			"properties": {
+				"rtlCursor.autoReapply": {
+					"type": "boolean",
+					"default": true,
+					"description": "After an editor update, re-apply the RTL patch automatically if you had it enabled"
+				},
+				"rtlCursor.autoRelaunch": {
+					"type": "boolean",
+					"default": true,
+					"description": "After applying or removing the RTL patch, automatically quit and relaunch the editor so changes take effect without a manual Exit"
+				},
+				"rtlCursor.showStatusBar": {
+					"type": "boolean",
+					"default": true,
+					"description": "نمایش دکمه وضعیت RTL در نوار وضعیت ادیتور"
+				}
+			}
+		}
+	},
+	"scripts": {
+		"package": "vsce package --no-dependencies --allow-missing-repository"
+	}
+}

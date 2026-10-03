@@ -1,0 +1,7 @@
+node_modules/
+*.vsix
+.vsixmanifest
+**/*.map
+.DS_Store
+Thumbs.db
+*.log

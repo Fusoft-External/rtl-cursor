@@ -1,0 +1,11 @@
+.git/**
+.vsixmanifest
+**/*.map
+**/*.vsix
+.gitignore
+node_modules/**
+src/**
+esbuild.js
+tsconfig.json
+*.md
+!readme.md
