@@ -1,6 +1,6 @@
-/* Font setup for Markdown Preview */
+/* Keep Markdown Preview on the user's editor font; Vazirmatn only as fallback. */
 body {
-	font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	font-family: var(--vscode-font-family, 'Vazirmatn'), 'Vazirmatn', sans-serif;
 }
 
 /* Cursor RTL — built-in Markdown preview adjustments.

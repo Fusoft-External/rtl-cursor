@@ -40,30 +40,78 @@
 
     removeExistingCursorRtlStyles();
 
+    var DEFAULT_UI_FONT = /^(segoe wpc|segoe ui|sf pro text|sf pro display|sf ns text|helvetica neue|-apple-system|blinkmacsystemfont|system-ui|ubuntu|droid sans|roboto|helvetica|arial|sans-serif)$/i;
+
+    function readCssVar(name) {
+        try {
+            return (getComputedStyle(document.documentElement).getPropertyValue(name) || '').trim();
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function hasLocalFont(name) {
+        try {
+            if (document.fonts && typeof document.fonts.check === 'function') {
+                return document.fonts.check('16px "' + name + '"') || document.fonts.check('16px ' + name);
+            }
+        } catch (e) {}
+        return false;
+    }
+
+    function isUserCustomFont(family) {
+        if (!family) return false;
+        var parts = family.split(',');
+        for (var i = 0; i < parts.length; i++) {
+            var p = parts[i].replace(/^["'\s]+|["'\s]+$/g, '');
+            if (!p || p.indexOf('var(') === 0) continue;
+            if (!DEFAULT_UI_FONT.test(p)) return true;
+        }
+        return false;
+    }
+
+    function buildUiFontStack() {
+        var userFont = readCssVar('--vscode-font-family');
+        if (isUserCustomFont(userFont)) {
+            return userFont;
+        }
+        var vazir = hasLocalFont('Vazirmatn') || hasLocalFont('Vazirmatn Regular');
+        if (vazir) {
+            return userFont ? "'Vazirmatn', " + userFont : "'Vazirmatn', sans-serif";
+        }
+        return userFont || 'sans-serif';
+    }
+
+    function buildMonoFontStack() {
+        var userMono = readCssVar('--vscode-editor-font-family') || readCssVar('--monaco-monospace-font');
+        return userMono ? userMono + ', monospace' : "Consolas, 'Courier New', monospace";
+    }
+
+    function applyResolvedFonts() {
+        try {
+            var root = document.documentElement;
+            if (!root || !root.style) return;
+            root.style.setProperty('--rtl-cursor-ui-font', buildUiFontStack());
+            root.style.setProperty('--rtl-cursor-mono-font', buildMonoFontStack());
+            if (isCanvasDocument && document.body) {
+                document.body.style.fontFamily = 'var(--rtl-cursor-ui-font)';
+            }
+        } catch (e) {}
+    }
+
+    applyResolvedFonts();
+    try {
+        if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === 'function') {
+            document.fonts.ready.then(applyResolvedFonts).catch(function() {});
+        }
+    } catch (e) {}
+
     const style = document.createElement('style');
     style.setAttribute('data-cursor-rtl-style', 'true');
     style.textContent = `
 
-        @font-face {
-            font-family: 'Vazirmatn';
-            src: local('Vazirmatn'), local('Vazirmatn Regular'), url('file:///C:/Users/HosseinJalili/AppData/Local/Microsoft/Windows/Fonts/Vazirmatn-Regular.ttf');
-            font-weight: 400;
-            font-style: normal;
-        }
-        @font-face {
-            font-family: 'Vazirmatn';
-            src: local('Vazirmatn Bold'), url('file:///C:/Users/HosseinJalili/AppData/Local/Microsoft/Windows/Fonts/Vazirmatn-Bold.ttf');
-            font-weight: 700;
-            font-style: normal;
-        }
-        @font-face {
-            font-family: 'Vazirmatn';
-            src: local('Vazirmatn Medium'), url('file:///C:/Users/HosseinJalili/AppData/Local/Microsoft/Windows/Fonts/Vazirmatn-Medium.ttf');
-            font-weight: 500;
-            font-style: normal;
-        }
-
-        /* Entire Workbench UI */
+        /* Prefer the user's Cursor font. Vazirmatn is prepended only when it is
+           actually installed and the user has not chosen a custom UI font. */
         body,
         .monaco-workbench,
         .monaco-workbench .part,
@@ -76,7 +124,7 @@
         .monaco-workbench .notifications-toasts,
         .monaco-menu,
         .monaco-dialog-box {
-            font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+            font-family: var(--rtl-cursor-ui-font, var(--vscode-font-family, sans-serif)) !important;
         }
 
         /* Chat, AI Assistant, Composer, Markdown & Plan */
@@ -95,10 +143,10 @@
         .ui-prompt-input-tiptap-readonly__content,
         .aislash-editor-input,
         .aislash-editor-input-readonly {
-            font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+            font-family: var(--rtl-cursor-ui-font, var(--vscode-font-family, sans-serif)) !important;
         }
 
-        /* Monospace elements stay monospace */
+        /* Code uses the editor font the user picked */
         code,
         code *,
         pre,
@@ -110,7 +158,7 @@
         .terminal,
         .xterm,
         kbd {
-            font-family: 'Cascadia Code', Consolas, 'Courier New', monospace !important;
+            font-family: var(--rtl-cursor-mono-font, var(--vscode-editor-font-family, monospace)) !important;
         }
 
         .aislash-editor-placeholder {
@@ -790,7 +838,7 @@
         #root a,
         #root span,
         #root div {
-            font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+            font-family: var(--rtl-cursor-ui-font, var(--vscode-font-family, sans-serif)) !important;
         }
 
         #root p,
@@ -818,7 +866,7 @@
         #root [data-code],
         #root .monaco-editor,
         #root svg text {
-            font-family: 'Cascadia Code', Consolas, 'Courier New', monospace !important;
+            font-family: var(--rtl-cursor-mono-font, var(--vscode-editor-font-family, monospace)) !important;
             direction: ltr !important;
             text-align: left !important;
             unicode-bidi: plaintext !important;
@@ -836,10 +884,7 @@
     if (isCanvasDocument) {
         try {
             document.documentElement.setAttribute('data-cursor-rtl-canvas', 'true');
-            if (document.body) {
-                document.body.style.fontFamily =
-                    "'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
-            }
+            applyResolvedFonts();
         } catch (e) {}
     }
     const planStyle = document.createElement('style');
