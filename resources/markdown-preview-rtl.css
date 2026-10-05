@@ -1,6 +1,6 @@
-/* Keep Markdown Preview on the user's editor font; Vazirmatn only as fallback. */
+/* Keep Markdown Preview on the user's Cursor font. */
 body {
-	font-family: var(--vscode-font-family, 'Vazirmatn'), 'Vazirmatn', sans-serif;
+	font-family: var(--vscode-editor-font-family, var(--vscode-font-family, sans-serif));
 }
 
 /* Cursor RTL — built-in Markdown preview adjustments.

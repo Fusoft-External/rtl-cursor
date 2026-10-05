@@ -40,7 +40,8 @@
 
     removeExistingCursorRtlStyles();
 
-    var DEFAULT_UI_FONT = /^(segoe wpc|segoe ui|sf pro text|sf pro display|sf ns text|helvetica neue|-apple-system|blinkmacsystemfont|system-ui|ubuntu|droid sans|roboto|helvetica|arial|sans-serif)$/i;
+    var DEFAULT_UI_FONT = /^(segoe wpc|segoe ui|segoe ui variable|sf pro text|sf pro display|sf ns text|helvetica neue|-apple-system|blinkmacsystemfont|system-ui|ubuntu|droid sans|roboto|helvetica|arial|sans-serif)$/i;
+    var DEFAULT_MONO_FONT = /^(menlo|monaco|consolas|'?courier new'?|courier|sf mono|ui-monospace|cascadia code|cascadia mono|cascadiacode|jetbrains mono|fira code|source code pro|monospace)$/i;
 
     function readCssVar(name) {
         try {
@@ -50,49 +51,87 @@
         }
     }
 
+    function splitFontParts(family) {
+        if (!family) return [];
+        return family.split(',').map(function(part) {
+            return part.replace(/^["'\s]+|["'\s]+$/g, '');
+        }).filter(function(p) {
+            return p && p.indexOf('var(') !== 0;
+        });
+    }
+
     function hasLocalFont(name) {
+        if (!name) return false;
         try {
-            if (document.fonts && typeof document.fonts.check === 'function') {
-                return document.fonts.check('16px "' + name + '"') || document.fonts.check('16px ' + name);
+            var canvas = document.createElement('canvas');
+            var ctx = canvas.getContext && canvas.getContext('2d');
+            if (ctx && ctx.measureText) {
+                var sample = 'متنآابپتجGgWwMm@#';
+                ctx.font = '72px "RTLCursorMissingFont", monospace';
+                var fallback = ctx.measureText(sample).width;
+                ctx.font = '72px "' + name + '", "RTLCursorMissingFont", monospace';
+                if (ctx.measureText(sample).width !== fallback) return true;
             }
         } catch (e) {}
+        try {
+            if (document.fonts && typeof document.fonts.check === 'function') {
+                return document.fonts.check('16px "' + name + '"');
+            }
+        } catch (e2) {}
         return false;
     }
 
-    function isUserCustomFont(family) {
-        if (!family) return false;
-        var parts = family.split(',');
+    function familyHasCustom(family, defaultRe) {
+        var parts = splitFontParts(family);
         for (var i = 0; i < parts.length; i++) {
-            var p = parts[i].replace(/^["'\s]+|["'\s]+$/g, '');
-            if (!p || p.indexOf('var(') === 0) continue;
-            if (!DEFAULT_UI_FONT.test(p)) return true;
+            if (!defaultRe.test(parts[i])) return true;
         }
         return false;
+    }
+
+    function isUserCustomUiFont(family) {
+        return familyHasCustom(family, DEFAULT_UI_FONT);
+    }
+
+    function isUserCustomEditorFont(family) {
+        return familyHasCustom(family, DEFAULT_MONO_FONT);
     }
 
     function buildUiFontStack() {
-        var userFont = readCssVar('--vscode-font-family');
-        if (isUserCustomFont(userFont)) {
-            return userFont;
+        var uiFont = readCssVar('--vscode-font-family');
+        var editorFont = readCssVar('--vscode-editor-font-family') || readCssVar('--monaco-monospace-font');
+        // Cursor on Apple keeps workbench UI as SF Pro even when the user
+        // changes editor.fontFamily — honor that chosen font first.
+        if (isUserCustomEditorFont(editorFont)) {
+            return editorFont;
+        }
+        if (isUserCustomUiFont(uiFont)) {
+            return uiFont;
         }
         var vazir = hasLocalFont('Vazirmatn') || hasLocalFont('Vazirmatn Regular');
         if (vazir) {
-            return userFont ? "'Vazirmatn', " + userFont : "'Vazirmatn', sans-serif";
+            return userFontWithVazir(uiFont);
         }
-        return userFont || 'sans-serif';
+        return uiFont || 'sans-serif';
+    }
+
+    function userFontWithVazir(uiFont) {
+        return uiFont ? "'Vazirmatn', " + uiFont : "'Vazirmatn', sans-serif";
     }
 
     function buildMonoFontStack() {
         var userMono = readCssVar('--vscode-editor-font-family') || readCssVar('--monaco-monospace-font');
-        return userMono ? userMono + ', monospace' : "Consolas, 'Courier New', monospace";
+        return userMono ? userMono : "Menlo, Monaco, Consolas, 'Courier New', monospace";
     }
 
     function applyResolvedFonts() {
         try {
             var root = document.documentElement;
             if (!root || !root.style) return;
-            root.style.setProperty('--rtl-cursor-ui-font', buildUiFontStack());
-            root.style.setProperty('--rtl-cursor-mono-font', buildMonoFontStack());
+            var ui = buildUiFontStack();
+            var mono = buildMonoFontStack();
+            root.style.setProperty('--rtl-cursor-ui-font', ui);
+            root.style.setProperty('--rtl-cursor-mono-font', mono);
             if (isCanvasDocument && document.body) {
                 document.body.style.fontFamily = 'var(--rtl-cursor-ui-font)';
             }
@@ -105,6 +144,14 @@
             document.fonts.ready.then(applyResolvedFonts).catch(function() {});
         }
     } catch (e) {}
+    (function watchFontVars() {
+        var tries = 0;
+        var timer = setInterval(function() {
+            applyResolvedFonts();
+            tries += 1;
+            if (tries >= 12) clearInterval(timer);
+        }, 500);
+    })();
 
     const style = document.createElement('style');
     style.setAttribute('data-cursor-rtl-style', 'true');

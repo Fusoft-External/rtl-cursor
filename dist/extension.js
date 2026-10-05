@@ -51,6 +51,9 @@ function watchStateDir() {
 function watchScriptPath() {
   return pathUser.join(watchStateDir(), "rtl-cursor-watch.ps1");
 }
+function watchVbsPath() {
+  return pathUser.join(watchStateDir(), "rtl-cursor-watch.vbs");
+}
 function watchLoaderCachePath() {
   return pathUser.join(watchStateDir(), "rtl-cursor-loader.cjs");
 }
@@ -441,38 +444,53 @@ function installBackgroundWatch(extensionPath) {
   try {
     ensureWatchStateDir();
     const srcScript = pathUser.join(extensionPath, "resources", "rtl-cursor-watch.ps1");
+    const srcVbs = pathUser.join(extensionPath, "resources", "rtl-cursor-watch.vbs");
     const srcLoader = pathUser.join(extensionPath, "resources", LOADER_FILENAME);
     if (fs3.existsSync(srcScript)) {
       fs3.copyFileSync(srcScript, watchScriptPath());
     }
+    if (fs3.existsSync(srcVbs)) {
+      fs3.copyFileSync(srcVbs, watchVbsPath());
+    }
     if (fs3.existsSync(srcLoader)) {
       fs3.copyFileSync(srcLoader, watchLoaderCachePath());
     }
+    const vbs = watchVbsPath();
     const script = watchScriptPath();
     if (!fs3.existsSync(script)) {
       return;
     }
-    const runCmd = `powershell.exe -NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "${script.replace(/"/g, '\\"')}"`;
+    const runCmd = fs3.existsSync(vbs)
+      ? `wscript.exe //nologo //B "${vbs.replace(/"/g, '\\"')}"`
+      : `powershell.exe -NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "${script.replace(/"/g, '\\"')}"`;
     child_process.spawn(
       "reg",
       ["add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", WATCH_RUN_VALUE, "/t", "REG_SZ", "/d", runCmd, "/f"],
       { detached: true, stdio: "ignore", windowsHide: true }
     ).unref();
-    child_process.spawn(
-      "powershell.exe",
-      [
-        "-NoLogo",
-        "-NoProfile",
-        "-NonInteractive",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-WindowStyle",
-        "Hidden",
-        "-File",
-        script
-      ],
-      { detached: true, stdio: "ignore", windowsHide: true }
-    ).unref();
+    if (fs3.existsSync(vbs)) {
+      child_process.spawn(
+        "wscript.exe",
+        ["//nologo", "//B", vbs],
+        { detached: true, stdio: "ignore", windowsHide: true }
+      ).unref();
+    } else {
+      child_process.spawn(
+        "powershell.exe",
+        [
+          "-NoLogo",
+          "-NoProfile",
+          "-NonInteractive",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-WindowStyle",
+          "Hidden",
+          "-File",
+          script
+        ],
+        { detached: true, stdio: "ignore", windowsHide: true }
+      ).unref();
+    }
   } catch (err) {
     console.error("[RTL Cursor] failed to install background watch:", err);
   }
