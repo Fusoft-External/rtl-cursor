@@ -41,6 +41,10 @@ var pathUser = __toESM(require("path"));
 var child_process = require("child_process");
 var WANT_ENABLED_KEY = "rtlCursor.enabled";
 var relaunchInFlight = false;
+var watchInstallInFlight;
+var repairTimer;
+var repairInFlight = false;
+var repairGeneration = 0;
 var WATCH_RUN_VALUE = "RtlCursorWatch";
 function enabledFlagPath() {
   return pathUser.join(os.homedir(), ".rtl-cursor-enabled");
@@ -131,7 +135,7 @@ var fs2 = __toESM(require("fs"));
 var path2 = __toESM(require("path"));
 
 // src/constants.ts
-var PATCH_LINE = 'import{createRequire}from"module";try{createRequire(import.meta.url)("./rtl-cursor-loader.cjs")}catch(e){console.error("[RTL Cursor] error loading ./rtl-cursor-loader.cjs: ", e)}';
+var PATCH_LINE = 'import{createRequire as __rtlCursorCreateRequire}from"module";try{__rtlCursorCreateRequire(import.meta.url)("./rtl-cursor-loader.cjs")}catch(e){console.error("[RTL Cursor] error loading ./rtl-cursor-loader.cjs: ", e)}';
 var PATCH_MARKER = "rtl-cursor-loader.cjs";
 var LOADER_FILENAME = "rtl-cursor-loader.cjs";
 var BACKUP_PREFIX = "main.js.rtl-cursor-backup-";
@@ -140,7 +144,7 @@ var BACKUP_PREFIX = "main.js.rtl-cursor-backup-";
 function isPatched(mainJsPath) {
   try {
     const content = fs2.readFileSync(mainJsPath, "utf-8");
-    return content.includes(PATCH_LINE);
+    return content.includes(PATCH_MARKER);
   } catch {
     return false;
   }
@@ -181,53 +185,49 @@ function applyPatch(mainJsPath) {
   if (content.includes(PATCH_LINE)) {
     return;
   }
-  const backupPath = backup(mainJsPath);
+  const clean = stripPatchLines(content);
+  const copyrightEnd = clean.indexOf("*/");
+  if (copyrightEnd === -1) {
+    throw new Error("Cannot find the copyright header in main.js");
+  }
+  const insertPos = copyrightEnd + 2;
+  const patched = clean.substring(0, insertPos) + "\n" + PATCH_LINE + clean.substring(insertPos);
+  backup(mainJsPath);
+  replaceMainJs(mainJsPath, content, patched);
+}
+function replaceMainJs(mainJsPath, original, replacement) {
+  const tempPath = `${mainJsPath}.rtl-cursor-${process.pid}-${Date.now()}.tmp`;
   try {
-    const lines = content.split("\n");
-    const existingIndex = lines.findIndex(
-      (line) => line.startsWith("import{createRequire")
-    );
-    if (existingIndex !== -1) {
-      lines[existingIndex] = PATCH_LINE;
-      fs2.writeFileSync(mainJsPath, lines.join("\n"), "utf-8");
-    } else {
-      const copyrightEnd = content.indexOf("*/");
-      if (copyrightEnd === -1) {
-        throw new Error("\u0627\u0646\u062A\u0647\u0627\u06CC \u06A9\u0627\u0645\u0646\u062A \u06A9\u067E\u06CC\u200C\u0631\u0627\u06CC\u062A \u062F\u0631 main.js \u067E\u06CC\u062F\u0627 \u0646\u0634\u062F");
-      }
-      const insertPos = copyrightEnd + 2;
-      const patched = content.substring(0, insertPos) + "\n" + PATCH_LINE + content.substring(insertPos);
-      fs2.writeFileSync(mainJsPath, patched, "utf-8");
+    fs2.writeFileSync(tempPath, replacement, { encoding: "utf8", flag: "wx" });
+    if (isEditorUpdateInProgress(mainJsPath) || fs2.readFileSync(mainJsPath, "utf8") !== original) {
+      throw new Error("Editor files changed during the update; RTL repair was deferred.");
     }
-  } catch (err) {
-    try {
-      fs2.copyFileSync(backupPath, mainJsPath);
-    } catch (rollbackErr) {
-      throw new Error(
-        `\u067E\u0686 \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F \u0648 \u0628\u0627\u0632\u06AF\u0631\u062F\u0627\u0646\u06CC \u0647\u0645 \u0634\u06A9\u0633\u062A \u062E\u0648\u0631\u062F. \u0628\u06A9\u0627\u067E: ${backupPath}. \u062E\u0637\u0627: ${err}. Rollback: ${rollbackErr}`
-      );
-    }
-    throw err;
+    fs2.renameSync(tempPath, mainJsPath);
+  } finally {
+    try { if (fs2.existsSync(tempPath)) fs2.unlinkSync(tempPath); } catch {}
   }
 }
 function removePatch(mainJsPath) {
   const dir = path2.dirname(mainJsPath);
-  const latestBackup = findLatestBackup(dir);
-  if (latestBackup) {
-    fs2.copyFileSync(latestBackup, mainJsPath);
-  } else {
-    const content = fs2.readFileSync(mainJsPath, "utf-8");
-    if (!content.includes(PATCH_MARKER)) {
-      return;
-    }
-    fs2.writeFileSync(mainJsPath, stripPatchLines(content), "utf-8");
+  const content = fs2.readFileSync(mainJsPath, "utf-8");
+  if (content.includes(PATCH_MARKER)) {
+    replaceMainJs(mainJsPath, content, stripPatchLines(content));
   }
   removeLoader(dir);
 }
 function copyLoader(outDir, extensionPath) {
   const src = path2.join(extensionPath, "resources", LOADER_FILENAME);
   const dest = path2.join(outDir, LOADER_FILENAME);
-  fs2.copyFileSync(src, dest);
+  copyAtomicFile(src, dest);
+}
+function copyAtomicFile(source, destination) {
+  const temporary = `${destination}.rtl-cursor-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.tmp`;
+  try {
+    fs2.writeFileSync(temporary, fs2.readFileSync(source), { flag: "wx" });
+    fs2.renameSync(temporary, destination);
+  } finally {
+    try { if (fs2.existsSync(temporary)) fs2.unlinkSync(temporary); } catch {}
+  }
 }
 function removeLoader(outDir) {
   const p = path2.join(outDir, LOADER_FILENAME);
@@ -437,23 +437,73 @@ function ensureWatchStateDir() {
   }
   return dir;
 }
-function installBackgroundWatch(extensionPath) {
+function updateActiveManifestPath() {
+  const roaming = process.env.APPDATA || pathUser.join(os.homedir(), "AppData", "Roaming");
+  return pathUser.join(roaming, "Cursor", "update-supervisor", "win32", "active.json");
+}
+function isEditorUpdateInProgress(mainJsPath = getMainJsPath()) {
+  if (process.platform !== "win32") return false;
+  const installRoot = pathUser.resolve(pathUser.dirname(mainJsPath), "..", "..", "..");
+  try {
+    return [updateActiveManifestPath(), pathUser.join(installRoot, "_"), pathUser.join(installRoot, "_bak")]
+      .some((candidate) => fs3.existsSync(candidate));
+  } catch {
+    return true;
+  }
+}
+function syncWatchSettings() {
+  ensureWatchStateDir();
+  const config = vscode2.workspace.getConfiguration("rtlCursor");
+  const settings = { autoReapply: config.get("autoReapply", true), autoRelaunch: config.get("autoRelaunch", true) };
+  const destination = pathUser.join(watchStateDir(), "watch-settings.json");
+  const temporary = `${destination}.${process.pid}.tmp`;
+  try {
+    fs3.writeFileSync(temporary, JSON.stringify(settings), "utf8");
+    fs3.renameSync(temporary, destination);
+  } finally {
+    try { if (fs3.existsSync(temporary)) fs3.unlinkSync(temporary); } catch {}
+  }
+}
+function runHiddenPowerShell(script) {
+  return new Promise((resolve, reject) => {
+    child_process.execFile("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")],
+      { windowsHide: true, timeout: 15e3 }, (error) => error ? reject(error) : resolve());
+  });
+}
+async function stopManagedWatchProcess() {
+  const pidFile = pathUser.join(watchStateDir(), "watch.pid");
+  const scriptPath = watchScriptPath().replace(/'/g, "''");
+  // The PID file may be stale or missing. Identify only our exact script before stopping any helper.
+  await runHiddenPowerShell(`$ErrorActionPreference='Stop'; $pattern='(?i)(?:^|\\s)-File\\s+"?' + [regex]::Escape('${scriptPath}') + '"?(?:\\s|$)'; $watchers=@(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" | Where-Object { $_.Name -eq 'powershell.exe' -and $_.CommandLine -match $pattern }); foreach ($watcher in $watchers) { $current=Get-CimInstance Win32_Process -Filter ('ProcessId=' + $watcher.ProcessId); if (-not $current -or $current.Name -ne 'powershell.exe' -or $current.CommandLine -notmatch $pattern -or $current.CreationDate -ne $watcher.CreationDate) { continue }; $helper=Get-Process -Id $watcher.ProcessId -ErrorAction SilentlyContinue; if ($helper) { Stop-Process -Id $watcher.ProcessId -Force -ErrorAction Stop; if (-not $helper.WaitForExit(5000)) { throw 'RTL watcher did not stop' } } }; $remaining=@(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" | Where-Object { $_.Name -eq 'powershell.exe' -and $_.CommandLine -match $pattern }); if ($remaining.Count -gt 0) { throw 'RTL watcher replacement deferred: old watcher is still running' }`);
+  try { fs3.unlinkSync(pidFile); } catch {}
+}
+async function installBackgroundWatch(extensionPath) {
   if (process.platform !== "win32") {
     return;
   }
+  if (watchInstallInFlight) return watchInstallInFlight;
+  watchInstallInFlight = installBackgroundWatchNow(extensionPath);
+  try { await watchInstallInFlight; } finally { watchInstallInFlight = void 0; }
+}
+async function installBackgroundWatchNow(extensionPath) {
   try {
     ensureWatchStateDir();
+    syncWatchSettings();
     const srcScript = pathUser.join(extensionPath, "resources", "rtl-cursor-watch.ps1");
     const srcVbs = pathUser.join(extensionPath, "resources", "rtl-cursor-watch.vbs");
     const srcLoader = pathUser.join(extensionPath, "resources", LOADER_FILENAME);
+    if (fs3.existsSync(srcScript) && fs3.existsSync(watchScriptPath()) &&
+        !fs3.readFileSync(srcScript).equals(fs3.readFileSync(watchScriptPath()))) {
+      await stopManagedWatchProcess();
+    }
     if (fs3.existsSync(srcScript)) {
-      fs3.copyFileSync(srcScript, watchScriptPath());
+      copyAtomicFile(srcScript, watchScriptPath());
     }
     if (fs3.existsSync(srcVbs)) {
-      fs3.copyFileSync(srcVbs, watchVbsPath());
+      copyAtomicFile(srcVbs, watchVbsPath());
     }
     if (fs3.existsSync(srcLoader)) {
-      fs3.copyFileSync(srcLoader, watchLoaderCachePath());
+      copyAtomicFile(srcLoader, watchLoaderCachePath());
     }
     const vbs = watchVbsPath();
     const script = watchScriptPath();
@@ -495,7 +545,7 @@ function installBackgroundWatch(extensionPath) {
     console.error("[RTL Cursor] failed to install background watch:", err);
   }
 }
-function stopBackgroundWatch() {
+async function stopBackgroundWatch() {
   if (process.platform !== "win32") {
     return;
   }
@@ -505,36 +555,23 @@ function stopBackgroundWatch() {
       ["delete", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", WATCH_RUN_VALUE, "/f"],
       { detached: true, stdio: "ignore", windowsHide: true }
     ).unref();
-    const pidFile = pathUser.join(watchStateDir(), "watch.pid");
-    if (fs3.existsSync(pidFile)) {
-      const pid = Number(String(fs3.readFileSync(pidFile, "utf8")).trim());
-      if (pid > 0) {
-        child_process.spawn("taskkill", ["/PID", String(pid), "/T", "/F"], {
-          detached: true,
-          stdio: "ignore",
-          windowsHide: true
-        }).unref();
-      }
-      try {
-        fs3.unlinkSync(pidFile);
-      } catch {
-      }
-    }
+    await stopManagedWatchProcess();
   } catch (err) {
     console.error("[RTL Cursor] failed to stop background watch:", err);
   }
 }
-function scheduleEditorRelaunch() {
+async function scheduleEditorRelaunch() {
   const exePath = process.execPath;
-  const delayMs = 2e3;
-  try {
+  let executable;
+  let args;
     if (process.platform === "win32") {
-      // Hidden PowerShell delay + relaunch (no visible cmd / ping window).
-      const psScript = `Start-Sleep -Milliseconds ${delayMs}; Start-Process -LiteralPath '${String(exePath).replace(/'/g, "''")}'`;
+      const quote = (value) => String(value).replace(/'/g, "''");
+      const installRoot = pathUser.dirname(exePath);
+      // Wait for graceful exit (including save dialogs) and any updater, never force an editor to close.
+      const psScript = `$ErrorActionPreference='Stop'; $exe='${quote(exePath)}'; $deadline=[DateTime]::UtcNow.AddSeconds(120); do { $running=@(Get-Process -Name '${quote(pathUser.basename(exePath, ".exe"))}' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe }); $updating=(Test-Path -LiteralPath '${quote(updateActiveManifestPath())}') -or (Test-Path -LiteralPath '${quote(pathUser.join(installRoot, "_"))}') -or (Test-Path -LiteralPath '${quote(pathUser.join(installRoot, "_bak"))}'); if ($running.Count -eq 0 -and -not $updating) { break }; if ([DateTime]::UtcNow -ge $deadline) { exit 0 }; Start-Sleep -Milliseconds 250 } while ($true); Start-Process -FilePath $exe -ErrorAction Stop`;
       const encoded = Buffer.from(psScript, "utf16le").toString("base64");
-      child_process.spawn(
-        "powershell.exe",
-        [
+      executable = "powershell.exe";
+      args = [
           "-NoLogo",
           "-NoProfile",
           "-NonInteractive",
@@ -544,35 +581,36 @@ function scheduleEditorRelaunch() {
           "Hidden",
           "-EncodedCommand",
           encoded
-        ],
-        {
-          detached: true,
-          stdio: "ignore",
-          windowsHide: true
-        }
-      ).unref();
-      return;
+        ];
+    } else {
+      const parentPid = Number(process.env.VSCODE_PID) || process.ppid;
+      const quotedExe = "'" + String(exePath).replace(/'/g, "'\\''") + "'";
+      executable = "/bin/sh";
+      args = ["-c", `attempt=0; while kill -0 ${parentPid} 2>/dev/null; do attempt=$((attempt + 1)); [ "$attempt" -ge 120 ] && exit 0; sleep 1; done; exec ${quotedExe}`];
     }
-    const shellCmd = `sleep ${Math.max(1, Math.ceil(delayMs / 1e3))}; exec ${JSON.stringify(exePath)}`;
-    child_process.spawn("/bin/sh", ["-c", shellCmd], {
-      detached: true,
-      stdio: "ignore"
-    }).unref();
-  } catch (err) {
-    console.error("[RTL Cursor] failed to schedule relaunch:", err);
-  }
+  return new Promise((resolve, reject) => {
+    const helper = child_process.spawn(executable, args, { detached: true, stdio: "ignore", windowsHide: true });
+    helper.once("error", reject);
+    helper.once("spawn", () => { helper.unref(); resolve(helper); });
+  });
 }
-async function relaunchEditorNow() {
+async function relaunchEditorNow(isValid = () => true) {
   if (relaunchInFlight) {
     return;
   }
   relaunchInFlight = true;
-  scheduleEditorRelaunch();
+  let helper;
   try {
+    if (!isValid()) return;
+    if (isEditorUpdateInProgress()) throw new Error("The editor is updating. Restart after the update finishes.");
+    helper = await scheduleEditorRelaunch();
+    if (!isValid()) { helper.kill(); return; }
     await vscode2.commands.executeCommand("workbench.action.quit");
   } catch (err) {
-    relaunchInFlight = false;
+    if (helper) helper.kill();
     throw err;
+  } finally {
+    relaunchInFlight = false;
   }
 }
 async function offerRestart(message, options) {
@@ -584,7 +622,9 @@ async function offerRestart(message, options) {
       `${message} \u0627\u062F\u06CC\u062A\u0648\u0631 \u062A\u0627 \u0686\u0646\u062F \u062B\u0627\u0646\u06CC\u0647 \u062E\u0648\u062F\u06A9\u0627\u0631 \u0628\u0627\u0632\u06CC\u06A7\u0632\u06CC \u0645\u06CC\u200C\u0634\u0648\u062F\u2026`
     );
     await new Promise((resolve) => setTimeout(resolve, 900));
-    await relaunchEditorNow();
+    const isValid = () => vscode2.workspace.getConfiguration("rtlCursor").get("autoRelaunch", true) &&
+      (!options || !options.isValid || options.isValid());
+    await relaunchEditorNow(isValid);
     return;
   }
   const restartLabel = autoRelaunch ? "\u0631\u06CC\u200C\u0627\u0633\u062A\u0627\u0631\u062A \u062E\u0648\u062F\u06A9\u0627\u0631" : "\u062E\u0631\u0648\u062C \u0627\u0632 Cursor";
@@ -601,8 +641,49 @@ async function offerRestart(message, options) {
     }
   }
 }
+async function waitForEditorFilesStable(mainJsPath, maxWaitMs = 30e3) {
+  const deadline = Date.now() + maxWaitMs;
+  let signature;
+  let stableSince = Date.now();
+  while (Date.now() < deadline) {
+    try {
+      const info = fs3.statSync(mainJsPath);
+      const current = `${info.size}:${info.mtimeMs}`;
+      if (isEditorUpdateInProgress(mainJsPath) || current !== signature) {
+        signature = current;
+        stableSince = Date.now();
+      } else if (Date.now() - stableSince >= 10e3) {
+        return true;
+      }
+    } catch {
+      signature = void 0;
+      stableSince = Date.now();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1e3));
+  }
+  return false;
+}
+function queueAutoRepair(context, delayMs = 1e3) {
+  if (repairTimer) clearTimeout(repairTimer);
+  repairTimer = setTimeout(async () => {
+    repairTimer = void 0;
+    if (!readWantEnabled(context) || !vscode2.workspace.getConfiguration("rtlCursor").get("autoReapply", true)) return;
+    if (repairInFlight) { queueAutoRepair(context, 5e3); return; }
+    if (getPatchState(getMainJsPath()) === "on") return;
+    repairInFlight = true;
+    try { await enableCommand(context, { silent: true }); } finally { repairInFlight = false; }
+  }, delayMs);
+}
 async function enableCommand(context, options) {
   const silent = !!(options && options.silent);
+  const generation = repairGeneration;
+  const isRepairValid = () => generation === repairGeneration && readWantEnabled(context) &&
+    vscode2.workspace.getConfiguration("rtlCursor").get("autoReapply", true);
+  if (isEditorUpdateInProgress()) {
+    if (silent) queueAutoRepair(context, 5e3);
+    else vscode2.window.showInformationMessage("Cursor در حال آپدیت است. بعد از پایان آپدیت، RTL را فعال کنید.");
+    return;
+  }
   const validation = validatePaths();
   if (!validation.valid) {
     vscode2.window.showErrorMessage(`RTL Cursor: ${validation.error}`);
@@ -623,21 +704,41 @@ async function enableCommand(context, options) {
     }
   }
   try {
+    if (!(await waitForEditorFilesStable(mainJsPath))) {
+      if (silent) queueAutoRepair(context, 5e3);
+      else vscode2.window.showInformationMessage("فایل‌های ادیتور هنوز در حال تغییرند. بعد از پایان آپدیت دوباره تلاش کنید.");
+      return;
+    }
+    if (silent && !isRepairValid()) return;
     copyLoader(outDir, context.extensionPath);
     applyPatch(mainJsPath);
-    await writeWantEnabled(context, true);
-    installBackgroundWatch(context.extensionPath);
+    if (!silent) await writeWantEnabled(context, true);
+    await installBackgroundWatch(context.extensionPath);
+    if (silent && !isRepairValid()) return;
     updateStatusBar("on");
     setupFileWatcher(mainJsPath, context);
+    if (silent && !vscode2.workspace.getConfiguration("rtlCursor").get("autoRelaunch", true)) {
+      vscode2.window.showInformationMessage("پچ RTL بعد از آپدیت دوباره اعمال شد؛ با راه‌اندازی بعدی ادیتور فعال می‌شود.");
+      return;
+    }
     await offerRestart(
       silent ? "\u0627\u062F\u06CC\u062A\u0648\u0631 \u0622\u067E\u062F\u06CC\u062A \u0634\u062F \u0648 \u067E\u0686 RTL \u062E\u0648\u062F\u06A9\u0627\u0631 \u062F\u0648\u0628\u0627\u0631\u0647 \u0627\u0639\u0645\u0627\u0644 \u0634\u062F." : firstTime ? "\u067E\u0686 RTL \u0627\u0639\u0645\u0627\u0644 \u0634\u062F." : "\u067E\u0686 RTL \u062F\u0648\u0628\u0627\u0631\u0647 \u0627\u0639\u0645\u0627\u0644 \u0634\u062F.",
-      { auto: true }
+      { auto: true, isValid: silent ? isRepairValid : void 0 }
     );
   } catch (err) {
+    if (silent && readWantEnabled(context)) {
+      console.warn("[RTL Cursor] automatic repair deferred:", err);
+      queueAutoRepair(context, 10e3);
+      return;
+    }
     vscode2.window.showErrorMessage(`RTL Cursor: ${handlePermissionError(err)}`);
   }
 }
 async function disableCommand(context) {
+  if (isEditorUpdateInProgress()) {
+    vscode2.window.showInformationMessage("Cursor در حال آپدیت است. بعد از پایان آپدیت، RTL را غیرفعال کنید.");
+    return;
+  }
   const validation = validatePaths();
   if (!validation.valid) {
     vscode2.window.showErrorMessage(`RTL Cursor: ${validation.error}`);
@@ -651,10 +752,19 @@ async function disableCommand(context) {
   if (confirm !== "\u062E\u0627\u0645\u0648\u0634 \u06A9\u0646") {
     return;
   }
+  repairGeneration++;
+  if (repairTimer) clearTimeout(repairTimer);
+  repairTimer = void 0;
   try {
+    if (!(await waitForEditorFilesStable(validation.mainJsPath))) {
+      vscode2.window.showInformationMessage("فایل‌های ادیتور هنوز در حال تغییرند. بعد از پایان آپدیت دوباره تلاش کنید.");
+      return;
+    }
     removePatch(validation.mainJsPath);
     await writeWantEnabled(context, false);
-    stopBackgroundWatch();
+    await stopBackgroundWatch();
+    if (repairTimer) clearTimeout(repairTimer);
+    repairTimer = void 0;
     if (fileWatcher) {
       fileWatcher.close();
       fileWatcher = void 0;
@@ -709,33 +819,13 @@ function setupFileWatcher(mainJsPath, context) {
     fileWatcher.close();
   }
   try {
-    fileWatcher = fs3.watch(mainJsPath, (eventType) => {
-      if (eventType !== "change") {
-        return;
-      }
-      setTimeout(async () => {
-        if (!readWantEnabled(context)) {
-          return;
-        }
-        const state = getPatchState(mainJsPath);
-        if (state !== "update-needed" && state !== "off") {
-          return;
-        }
-        updateStatusBar("update-needed");
-        const config = vscode2.workspace.getConfiguration("rtlCursor");
-        if (config.get("autoReapply", true)) {
-          await enableCommand(context, { silent: true });
-          return;
-        }
-        const choice = await vscode2.window.showWarningMessage(
-          "\u0627\u062F\u06CC\u062A\u0648\u0631 \u0622\u067E\u062F\u06CC\u062A \u0634\u062F \u0648 \u067E\u0686 RTL \u0628\u0631\u062F\u0627\u0634\u062A\u0647 \u0634\u062F. \u0627\u0644\u0627\u0646 \u062F\u0631\u0633\u062A \u0634\u0648\u062F\u061F",
-          "\u0627\u0644\u0627\u0646 \u062F\u0631\u0633\u062A \u06A9\u0646",
-          "\u0628\u0639\u062F\u0627\u064B"
-        );
-        if (choice === "\u0627\u0644\u0627\u0646 \u062F\u0631\u0633\u062A \u06A9\u0646") {
-          await vscode2.commands.executeCommand("rtlCursor.enable");
-        }
-      }, 1e3);
+    // Watching the directory survives atomic replacement of main.js by the updater.
+    fileWatcher = fs3.watch(pathUser.dirname(mainJsPath), (eventType, filename) => {
+      if (filename && String(filename) !== pathUser.basename(mainJsPath)) return;
+      if (!readWantEnabled(context)) return;
+      if (getPatchState(mainJsPath) === "on") return;
+      updateStatusBar("update-needed");
+      queueAutoRepair(context);
     });
   } catch {
   }
@@ -764,17 +854,17 @@ function activate(context) {
   if (state === "on") {
     writeWantEnabled(context, true);
     try {
-      copyLoader(getAppOutDir(), context.extensionPath);
+      if (!isEditorUpdateInProgress(mainJsPath)) copyLoader(getAppOutDir(), context.extensionPath);
     } catch {
     }
   }
   if (readWantEnabled(context)) {
-    installBackgroundWatch(context.extensionPath);
+    void installBackgroundWatch(context.extensionPath);
   }
   updateStatusBar(state);
   const autoReapply = vscode2.workspace.getConfiguration("rtlCursor").get("autoReapply", true);
   if (autoReapply && readWantEnabled(context) && state !== "on") {
-    enableCommand(context, { silent: true });
+    queueAutoRepair(context);
   }
   if (fs3.existsSync(mainJsPath) && (getPatchState(mainJsPath) === "on" || readWantEnabled(context))) {
     setupFileWatcher(mainJsPath, context);
@@ -783,6 +873,16 @@ function activate(context) {
     (e) => {
       if (e.affectsConfiguration("rtlCursor.showStatusBar")) {
         updateStatusBar(getPatchState(mainJsPath));
+      }
+      if (e.affectsConfiguration("rtlCursor.autoReapply")) {
+        repairGeneration++;
+        if (process.platform === "win32" && readWantEnabled(context)) {
+          try { syncWatchSettings(); } catch (err) { console.error("[RTL Cursor] failed to save watch settings:", err); }
+        }
+        queueAutoRepair(context);
+      }
+      if (e.affectsConfiguration("rtlCursor.autoRelaunch") && process.platform === "win32" && readWantEnabled(context)) {
+        try { syncWatchSettings(); } catch (err) { console.error("[RTL Cursor] failed to save watch settings:", err); }
       }
     },
     null,
@@ -796,6 +896,9 @@ function activate(context) {
   };
 }
 function deactivate() {
+  repairGeneration++;
+  if (repairTimer) clearTimeout(repairTimer);
+  repairTimer = void 0;
   if (fileWatcher) {
     fileWatcher.close();
     fileWatcher = void 0;

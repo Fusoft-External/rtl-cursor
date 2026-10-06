@@ -2,7 +2,7 @@
 	"name": "rtl-cursor",
 	"displayName": "RTL Cursor & Antigravity",
 	"description": "Smart RTL for Cursor and Antigravity IDE (Chat, Agent, Plan, Canvas, and Markdown). Honors the user's Cursor font (including editor.fontFamily on Apple). Vazirmatn is only a fallback. RTL text is right-aligned; code and LTR text stay left-to-right.",
-	"version": "1.0.12",
+	"version": "1.0.13",
 	"publisher": "fusoft",
 	"license": "Apache-2.0",
 	"icon": "resources/icon.png",
@@ -62,7 +62,7 @@
 				"rtlCursor.autoRelaunch": {
 					"type": "boolean",
 					"default": true,
-					"description": "After applying or removing the RTL patch, automatically quit and relaunch the editor so changes take effect without a manual Exit"
+					"description": "After Enable, Disable, or automatic repair after a completed update, gracefully quit and relaunch the editor. Works in Agent mode without opening the IDE; never force-closes the editor."
 				},
 				"rtlCursor.showStatusBar": {
 					"type": "boolean",
@@ -73,6 +73,9 @@
 		}
 	},
 	"scripts": {
-		"package": "vsce package --no-dependencies --allow-missing-repository"
+		"package": "vsce package --no-dependencies --allow-missing-repository",
+		"test": "node --test tests/extension-restart.test.cjs",
+		"test:watcher": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tests/watcher.test.ps1",
+		"test:migration": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tests/migration.test.ps1"
 	}
 }

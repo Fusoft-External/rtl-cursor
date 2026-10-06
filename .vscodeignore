@@ -4,6 +4,8 @@
 **/*.vsix
 .gitignore
 node_modules/**
+tests/**
+scripts/**
 src/**
 esbuild.js
 tsconfig.json
