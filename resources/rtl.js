@@ -40,173 +40,32 @@
 
     removeExistingCursorRtlStyles();
 
-    var DEFAULT_UI_FONT = /^(segoe wpc|segoe ui|segoe ui variable|sf pro text|sf pro display|sf ns text|helvetica neue|-apple-system|blinkmacsystemfont|system-ui|ubuntu|droid sans|roboto|helvetica|arial|sans-serif)$/i;
-    var DEFAULT_MONO_FONT = /^(menlo|monaco|consolas|'?courier new'?|courier|sf mono|ui-monospace|cascadia code|cascadia mono|cascadiacode|jetbrains mono|fira code|source code pro|monospace)$/i;
-
-    function readCssVar(name) {
-        try {
-            return (getComputedStyle(document.documentElement).getPropertyValue(name) || '').trim();
-        } catch (e) {
-            return '';
-        }
-    }
-
-    function splitFontParts(family) {
-        if (!family) return [];
-        return family.split(',').map(function(part) {
-            return part.replace(/^["'\s]+|["'\s]+$/g, '');
-        }).filter(function(p) {
-            return p && p.indexOf('var(') !== 0;
-        });
-    }
-
-    function hasLocalFont(name) {
-        if (!name) return false;
-        try {
-            var canvas = document.createElement('canvas');
-            var ctx = canvas.getContext && canvas.getContext('2d');
-            if (ctx && ctx.measureText) {
-                var sample = 'متنآابپتجGgWwMm@#';
-                ctx.font = '72px "RTLCursorMissingFont", monospace';
-                var fallback = ctx.measureText(sample).width;
-                ctx.font = '72px "' + name + '", "RTLCursorMissingFont", monospace';
-                if (ctx.measureText(sample).width !== fallback) return true;
-            }
-        } catch (e) {}
-        try {
-            if (document.fonts && typeof document.fonts.check === 'function') {
-                return document.fonts.check('16px "' + name + '"');
-            }
-        } catch (e2) {}
-        return false;
-    }
-
-    function familyHasCustom(family, defaultRe) {
-        var parts = splitFontParts(family);
-        for (var i = 0; i < parts.length; i++) {
-            if (!defaultRe.test(parts[i])) return true;
-        }
-        return false;
-    }
-
-    function isUserCustomUiFont(family) {
-        return familyHasCustom(family, DEFAULT_UI_FONT);
-    }
-
-    function isUserCustomEditorFont(family) {
-        return familyHasCustom(family, DEFAULT_MONO_FONT);
-    }
-
-    function buildUiFontStack() {
-        var uiFont = readCssVar('--vscode-font-family');
-        var editorFont = readCssVar('--vscode-editor-font-family') || readCssVar('--monaco-monospace-font');
-        // Cursor on Apple keeps workbench UI as SF Pro even when the user
-        // changes editor.fontFamily — honor that chosen font first.
-        if (isUserCustomEditorFont(editorFont)) {
-            return editorFont;
-        }
-        if (isUserCustomUiFont(uiFont)) {
-            return uiFont;
-        }
-        var vazir = hasLocalFont('Vazirmatn') || hasLocalFont('Vazirmatn Regular');
-        if (vazir) {
-            return userFontWithVazir(uiFont);
-        }
-        return uiFont || 'sans-serif';
-    }
-
-    function userFontWithVazir(uiFont) {
-        return uiFont ? "'Vazirmatn', " + uiFont : "'Vazirmatn', sans-serif";
-    }
-
-    function buildMonoFontStack() {
-        var userMono = readCssVar('--vscode-editor-font-family') || readCssVar('--monaco-monospace-font');
-        return userMono ? userMono : "Menlo, Monaco, Consolas, 'Courier New', monospace";
-    }
-
-    function applyResolvedFonts() {
-        try {
-            var root = document.documentElement;
-            if (!root || !root.style) return;
-            var ui = buildUiFontStack();
-            var mono = buildMonoFontStack();
-            root.style.setProperty('--rtl-cursor-ui-font', ui);
-            root.style.setProperty('--rtl-cursor-mono-font', mono);
-            if (isCanvasDocument && document.body) {
-                document.body.style.fontFamily = 'var(--rtl-cursor-ui-font)';
-            }
-        } catch (e) {}
-    }
-
-    applyResolvedFonts();
+    // Register optional font files without setting font-family anywhere. The
+    // editor and the user's own font settings decide whether to use Vazirmatn.
     try {
-        if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === 'function') {
-            document.fonts.ready.then(applyResolvedFonts).catch(function() {});
+        var bundledFonts = window.__cursorRtlConfig && window.__cursorRtlConfig.bundledFonts;
+        if (Array.isArray(bundledFonts) && typeof FontFace === 'function' && document.fonts) {
+            bundledFonts.forEach(function(font) {
+                var binary = atob(font.data);
+                var bytes = new Uint8Array(binary.length);
+                for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                var face = new FontFace('Vazirmatn', bytes, { weight: font.weight, style: 'normal' });
+                document.fonts.add(face);
+                face.load().catch(function(error) {
+                    document.fonts.delete(face);
+                    console.warn(RTL_LOG, 'could not load bundled Vazirmatn:', error);
+                });
+            });
         }
-    } catch (e) {}
-    (function watchFontVars() {
-        var tries = 0;
-        var timer = setInterval(function() {
-            applyResolvedFonts();
-            tries += 1;
-            if (tries >= 12) clearInterval(timer);
-        }, 500);
-    })();
+    } catch (e) {
+        console.warn(RTL_LOG, 'could not register bundled Vazirmatn:', e);
+    }
 
     const style = document.createElement('style');
     style.setAttribute('data-cursor-rtl-style', 'true');
     style.textContent = `
 
-        /* Prefer the user's Cursor font. Vazirmatn is prepended only when it is
-           actually installed and the user has not chosen a custom UI font. */
-        body,
-        .monaco-workbench,
-        .monaco-workbench .part,
-        .monaco-workbench .titlebar,
-        .monaco-workbench .activitybar,
-        .monaco-workbench .sidebar,
-        .monaco-workbench .statusbar,
-        .monaco-workbench .panel,
-        .monaco-workbench .quick-input-widget,
-        .monaco-workbench .notifications-toasts,
-        .monaco-menu,
-        .monaco-dialog-box {
-            font-family: var(--rtl-cursor-ui-font, var(--vscode-font-family, sans-serif)) !important;
-        }
-
-        /* Chat, AI Assistant, Composer, Markdown & Plan */
-        .composer-rendered-message,
-        .composer-rendered-message p,
-        .composer-rendered-message li,
-        .composer-rendered-message span,
-        .markdown-root,
-        .markdown-root p,
-        .markdown-root li,
-        .markdown-root span,
-        .markdown-section,
-        .plan-editor,
-        .ui-plan-editor,
-        .ui-prompt-input-editor__input,
-        .ui-prompt-input-tiptap-readonly__content,
-        .aislash-editor-input,
-        .aislash-editor-input-readonly {
-            font-family: var(--rtl-cursor-ui-font, var(--vscode-font-family, sans-serif)) !important;
-        }
-
-        /* Code uses the editor font the user picked */
-        code,
-        code *,
-        pre,
-        pre *,
-        .monaco-editor .view-line,
-        .cursor-code-block-content,
-        .cursor-code-block-content *,
-        .inline-code,
-        .terminal,
-        .xterm,
-        kbd {
-            font-family: var(--rtl-cursor-mono-font, var(--vscode-editor-font-family, monospace)) !important;
-        }
+        /* Preserve each surface's native font and the user's font settings. */
 
         .aislash-editor-placeholder {
             right: 15px !important;
@@ -866,28 +725,6 @@
         }
 
         /* ===== Cursor Canvas (iframe preview + canvas editor) ===== */
-        html:has(#root),
-        body:has(#root),
-        #root,
-        #root p,
-        #root li,
-        #root h1,
-        #root h2,
-        #root h3,
-        #root h4,
-        #root h5,
-        #root h6,
-        #root blockquote,
-        #root td,
-        #root th,
-        #root label,
-        #root button,
-        #root a,
-        #root span,
-        #root div {
-            font-family: var(--rtl-cursor-ui-font, var(--vscode-font-family, sans-serif)) !important;
-        }
-
         #root p,
         #root li,
         #root h1,
@@ -913,7 +750,6 @@
         #root [data-code],
         #root .monaco-editor,
         #root svg text {
-            font-family: var(--rtl-cursor-mono-font, var(--vscode-editor-font-family, monospace)) !important;
             direction: ltr !important;
             text-align: left !important;
             unicode-bidi: plaintext !important;
@@ -931,7 +767,6 @@
     if (isCanvasDocument) {
         try {
             document.documentElement.setAttribute('data-cursor-rtl-canvas', 'true');
-            applyResolvedFonts();
         } catch (e) {}
     }
     const planStyle = document.createElement('style');

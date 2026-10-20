@@ -7,3 +7,10 @@ by Mordechai Alter (github.com/motcke), licensed under the Apache License, Versi
 The chat/agent RTL runtime in `resources/rtl.js` and the Electron loader pattern
 are adapted from that project. Modifications for this repository are copyright
 the RTL Cursor contributors.
+
+This product also bundles unmodified Vazirmatn Regular and Bold fonts.
+Copyright 2015 The Vazirmatn Project Authors
+(https://github.com/rastikerdar/vazirmatn).
+These fonts are licensed under the SIL Open Font License, Version 1.1;
+see resources/fonts/OFL.txt. The font license is separate from the
+Apache-2.0 license covering the extension code.

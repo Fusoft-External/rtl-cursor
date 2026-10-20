@@ -52,6 +52,13 @@ function enabledFlagPath() {
 function watchStateDir() {
   return pathUser.join(os.homedir(), ".rtl-cursor");
 }
+function syncFontSettings() {
+  const stateDir = watchStateDir();
+  fs3.mkdirSync(stateDir, { recursive: true });
+  fs3.writeFileSync(pathUser.join(stateDir, "font-settings.json"), JSON.stringify({
+    loadBundledVazirmatn: vscode2.workspace.getConfiguration("rtlCursor").get("loadBundledVazirmatn", false) === true
+  }), "utf8");
+}
 function watchScriptPath() {
   return pathUser.join(watchStateDir(), "rtl-cursor-watch.ps1");
 }
@@ -831,6 +838,7 @@ function setupFileWatcher(mainJsPath, context) {
   }
 }
 function activate(context) {
+  try { syncFontSettings(); } catch (err) { console.error("[RTL Cursor] failed to save font settings:", err); }
   statusBarItem = vscode2.window.createStatusBarItem(
     vscode2.StatusBarAlignment.Right,
     100
@@ -871,6 +879,9 @@ function activate(context) {
   }
   vscode2.workspace.onDidChangeConfiguration(
     (e) => {
+      if (e.affectsConfiguration("rtlCursor.loadBundledVazirmatn")) {
+        try { syncFontSettings(); } catch (err) { console.error("[RTL Cursor] failed to save font settings:", err); }
+      }
       if (e.affectsConfiguration("rtlCursor.showStatusBar")) {
         updateStatusBar(getPatchState(mainJsPath));
       }

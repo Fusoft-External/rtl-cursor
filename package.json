@@ -1,8 +1,8 @@
 {
 	"name": "rtl-cursor",
 	"displayName": "RTL Cursor & Antigravity",
-	"description": "Smart RTL for Cursor and Antigravity IDE (Chat, Agent, Plan, Canvas, and Markdown). Honors the user's Cursor font (including editor.fontFamily on Apple). Vazirmatn is only a fallback. RTL text is right-aligned; code and LTR text stay left-to-right.",
-	"version": "1.0.13",
+	"description": "Smart RTL for Cursor and Antigravity IDE (Chat, Agent, Plan, Canvas, and Markdown). Preserves the editor's native fonts and user font settings without overrides. RTL text is right-aligned; code and LTR text stay left-to-right.",
+	"version": "1.0.14",
 	"publisher": "fusoft",
 	"license": "Apache-2.0",
 	"icon": "resources/icon.png",
@@ -18,7 +18,6 @@
 		"antigravity",
 		"chat",
 		"right-to-left",
-		"vazirmatn",
 		"persian",
 		"arabic",
 		"canvas"
@@ -54,6 +53,12 @@
 		"configuration": {
 			"title": "RTL Cursor",
 			"properties": {
+				"rtlCursor.loadBundledVazirmatn": {
+					"type": "boolean",
+					"scope": "application",
+					"default": false,
+					"description": "Load bundled Vazirmatn Regular and Bold in the editor window and Canvas. Does not change any font setting. To use it, select Vazirmatn in the editor's font settings. Reload the window after changing this option."
+				},
 				"rtlCursor.autoReapply": {
 					"type": "boolean",
 					"default": true,
@@ -74,7 +79,7 @@
 	},
 	"scripts": {
 		"package": "vsce package --no-dependencies --allow-missing-repository",
-		"test": "node --test tests/extension-restart.test.cjs",
+		"test": "node --test tests/extension-restart.test.cjs tests/runtime-fonts.test.cjs",
 		"test:watcher": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tests/watcher.test.ps1",
 		"test:migration": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tests/migration.test.ps1"
 	}

@@ -550,4 +550,28 @@ test("a concurrent editor update wins over a pending RTL file replacement", () =
     "Aborted patch removes its temporary file");
 });
 
+test("bundled fonts are disabled on activation and only the extension's font preference is saved", async () => {
+  const harness = createHarness({ config: { autoReapply: false } });
+  harness.sandbox.module.exports.activate(harness.context);
+  await harness.settle();
+  const settingsPath = windowsPath.join(stateDir, "font-settings.json");
+  assert.deepEqual(JSON.parse(harness.files.get(settingsPath)), { loadBundledVazirmatn: false });
+  assert.deepEqual(harness.quitCalls, [], "Registering the default font preference never restarts the editor");
+});
+
+test("opting into and out of bundled fonts persists the preference without restarting the editor", async () => {
+  const harness = createHarness({ config: { autoReapply: false, loadBundledVazirmatn: true } });
+  harness.sandbox.module.exports.activate(harness.context);
+  await harness.settle();
+  const settingsPath = windowsPath.join(stateDir, "font-settings.json");
+  assert.deepEqual(JSON.parse(harness.files.get(settingsPath)), { loadBundledVazirmatn: true });
+  harness.config.loadBundledVazirmatn = false;
+  harness.configChanged("rtlCursor.loadBundledVazirmatn");
+  assert.deepEqual(JSON.parse(harness.files.get(settingsPath)), { loadBundledVazirmatn: false });
+  harness.config.loadBundledVazirmatn = true;
+  harness.configChanged("rtlCursor.loadBundledVazirmatn");
+  assert.deepEqual(JSON.parse(harness.files.get(settingsPath)), { loadBundledVazirmatn: true });
+  assert.deepEqual(harness.quitCalls, []);
+});
+
 module.exports = { createHarness, decodePowerShell, validatePowerShell };

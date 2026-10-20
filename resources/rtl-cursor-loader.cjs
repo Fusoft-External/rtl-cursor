@@ -6,7 +6,7 @@
     var LOG_PREFIX = "[RTL Cursor Loader]";
     var homeDir = os.homedir();
     var LOG_FILE = path.join(homeDir, "rtl-cursor.log");
-    var LOADER_VERSION = "1.0.12";
+    var LOADER_VERSION = "1.0.14";
     var EXT_DIR_RE = /^(?:peyma|fusoft)\.rtl-cursor-(\d+)\.(\d+)\.(\d+)/;
 
     function log() {
@@ -141,6 +141,23 @@
         return target.executeJavaScript('typeof window.__cursorRtlScanAll === "function"');
     }
 
+    function getRuntimeConfig(rtlPath) {
+        var config = { editorRtl: "off" };
+        try {
+            var settingsPath = path.join(homeDir, ".rtl-cursor", "font-settings.json");
+            var settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+            if (settings.loadBundledVazirmatn !== true) return config;
+            var fontDir = path.join(path.dirname(rtlPath), "fonts");
+            config.bundledFonts = [
+                { weight: "400", data: fs.readFileSync(path.join(fontDir, "Vazirmatn-Regular.ttf")).toString("base64") },
+                { weight: "700", data: fs.readFileSync(path.join(fontDir, "Vazirmatn-Bold.ttf")).toString("base64") }
+            ];
+        } catch (e) {
+            // Missing settings or fonts leave the editor's font behavior untouched.
+        }
+        return config;
+    }
+
     function runRtlScriptOnTarget(target, label, currentUrl) {
         var rtlPath = findRtlScript();
         if (!rtlPath) {
@@ -149,7 +166,7 @@
             return;
         }
         var script = fs.readFileSync(rtlPath, "utf-8");
-        var configScript = "window.__cursorRtlConfig = " + JSON.stringify({ editorRtl: "off" }) + ";\n";
+        var configScript = "window.__cursorRtlConfig = " + JSON.stringify(getRuntimeConfig(rtlPath)) + ";\n";
         log(label, "executeJavaScript length:", script.length, "url=" + currentUrl);
         target.executeJavaScript(configScript + script)
             .then(function() { return isRtlRuntimeAliveInTarget(target); })
