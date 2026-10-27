@@ -39,6 +39,10 @@ test("VS Code messages stay bidirectional while Monaco owns prompt typing and la
       </div><span id="title" class="session-title">عنوان نشست فارسی</span>
       <div class="monaco-editor"><div id="editor" class="view-line">کد فارسی</div></div>
       <div class="rendered-markdown"><p id="unrelated">بیرون از چت</p></div></div>
+      <div class="ui-prompt-input"><div id="cursorPrompt" class="tiptap ProseMirror" contenteditable="true"><p id="cursorPromptLine">پیام فارسی در Cursor</p></div></div>
+      <div class="aislash-editor-input"><p id="cursorComposer">متن فارسی کامپوزر</p></div>
+      <div class="markdown-root"><p id="cursorAnswer">پاسخ فارسی Cursor</p><p id="cursorEnglish">English Cursor response</p><pre id="cursorCode"><code>const x = 'فارسی';</code></pre></div>
+      <article role="article"><p id="antigravityAnswer">پاسخ فارسی دستیار</p><p id="antigravityEnglish">English agent response</p></article>
       <script>
       window.promptMutations=[];
       const promptRoot=document.querySelector('.interactive-input-editor');
@@ -49,7 +53,7 @@ test("VS Code messages stay bidirectional while Monaco owns prompt typing and la
       <script>
       const snapshot = (id) => { const el = document.getElementById(id); const s = getComputedStyle(el); return {dir:el.getAttribute('dir'), direction:s.direction, align:s.textAlign, font:s.fontFamily}; };
       setTimeout(() => {
-        const initial = Object.fromEntries(['request','persian','english','list','cell','englishCell','question','option','englishOption','freeform','prompt','todo','title','terminal','editor','unrelated','codeLine','inline','pre'].map(id => [id, snapshot(id)]));
+        const initial = Object.fromEntries(['request','persian','english','list','cell','englishCell','question','option','englishOption','freeform','prompt','todo','title','terminal','editor','unrelated','codeLine','inline','pre','cursorPrompt','cursorPromptLine','cursorComposer','cursorAnswer','cursorEnglish','cursorCode','antigravityAnswer','antigravityEnglish'].map(id => [id, snapshot(id)]));
         const initialSelection={node:getSelection().anchorNode.parentElement.id,offset:getSelection().anchorOffset};
         window.__cursorRtlSetEditorMode('always');
         const promptEditorMarked=document.querySelector('.interactive-input-editor .monaco-editor').hasAttribute('data-cursor-rtl-dir');
@@ -93,6 +97,11 @@ test("VS Code messages stay bidirectional while Monaco owns prompt typing and la
     assert.deepEqual(data.initialSelection, {node:"promptText",offset:2}, "The initial RTL scan preserves the selection");
     assert.equal(data.freeform.dir, "auto", "Native textareas follow input without DOM mutations");
     assert.equal(data.freeform.direction, "rtl");
+    for (const id of ["cursorPrompt", "cursorPromptLine", "cursorComposer", "cursorAnswer", "antigravityAnswer"]) {
+      assert.equal(data.initial[id].dir, "rtl", id + " keeps its existing RTL behavior");
+      assert.equal(data.initial[id].direction, "rtl", id);
+    }
+    for (const id of ["cursorEnglish", "cursorCode", "antigravityEnglish"]) assert.equal(data.initial[id].direction, "ltr", id);
   } finally {
     assert.equal(path.dirname(path.resolve(tempDir)), path.resolve(os.tmpdir()));
     assert.ok(path.basename(tempDir).startsWith("rtl-vscode-browser-"));
