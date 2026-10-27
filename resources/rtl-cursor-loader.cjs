@@ -6,7 +6,7 @@
     var LOG_PREFIX = "[RTL Cursor Loader]";
     var homeDir = os.homedir();
     var LOG_FILE = path.join(homeDir, "rtl-cursor.log");
-    var LOADER_VERSION = "1.0.15";
+    var LOADER_VERSION = "1.0.16";
     var EXT_DIR_RE = /^(?:peyma|fusoft)\.rtl-cursor-(\d+)\.(\d+)\.(\d+)/;
 
     function log() {
