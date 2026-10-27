@@ -230,6 +230,14 @@ function copyLoader(outDir, extensionPath) {
   const src = path2.join(extensionPath, "resources", LOADER_FILENAME);
   const dest = path2.join(outDir, LOADER_FILENAME);
   copyAtomicFile(src, dest);
+  if (isVSCodeHost()) {
+    const nativeSource = path2.join(extensionPath, "resources", "rtl-vscode-native.cjs");
+    if (fs2.existsSync(nativeSource)) {
+      copyAtomicFile(nativeSource, path2.join(outDir, "rtl-vscode-native.cjs"));
+      const result = require(nativeSource).syncNativeChat(outDir, true);
+      if (!result.supported) console.warn("[RTL Cursor] Native chat input RTL unavailable:", result.reason);
+    }
+  }
 }
 function copyAtomicFile(source, destination) {
   const temporary = `${destination}.rtl-cursor-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.tmp`;
@@ -772,6 +780,13 @@ async function disableCommand(context) {
     if (!(await waitForEditorFilesStable(validation.mainJsPath))) {
       vscode2.window.showInformationMessage("فایل‌های ادیتور هنوز در حال تغییرند. بعد از پایان آپدیت دوباره تلاش کنید.");
       return;
+    }
+    if (isVSCodeHost()) {
+      const nativeSource = pathUser.join(context.extensionPath, "resources", "rtl-vscode-native.cjs");
+      if (fs3.existsSync(nativeSource)) {
+        const result = require(nativeSource).syncNativeChat(getAppOutDir(), false);
+        if (!result.supported) throw new Error("Native chat RTL cleanup failed: " + result.reason);
+      }
     }
     removePatch(validation.mainJsPath);
     await writeWantEnabled(context, false);

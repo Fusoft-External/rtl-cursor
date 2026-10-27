@@ -10,6 +10,7 @@ const home = "C:\\Users\\rtl-agent-test";
 
 async function load(url, options = {}) {
   const scripts = [];
+  const nativeCalls = [];
   const reads = [];
   const app = new EventEmitter();
   app.getName = () => "Code";
@@ -22,11 +23,18 @@ async function load(url, options = {}) {
   const vscodeDir = path.win32.join(home, ".vscode", "extensions");
   const preferred = options.extensionDir || vscodeDir;
   const resource = path.win32.join(preferred, extension, "resources", "rtl.js");
+  const appOut = "C:\\Code\\resources\\app\\out";
+  const nativeSource = path.win32.join(path.win32.dirname(resource), "rtl-vscode-native.cjs");
+  const nativeCache = path.win32.join(appOut, "rtl-vscode-native.cjs");
   const cursorDir = path.win32.join(home, ".cursor", "extensions");
   const dirs = [vscodeDir, cursorDir, preferred];
   const fakeFs = {
     writeFileSync() {}, appendFileSync() {},
-    existsSync(file) { return dirs.includes(file) || file === resource; },
+    existsSync(file) {
+      if (file === nativeSource) return options.native === "source";
+      if (file === nativeCache) return options.native === "cached";
+      return !options.uninstalled && (dirs.includes(file) || file === resource);
+    },
     readdirSync() { return [extension]; },
     readFileSync(file) {
       reads.push(file);
@@ -37,14 +45,16 @@ async function load(url, options = {}) {
   };
   vm.runInNewContext(source, {
     require(name) {
+      if (name === nativeSource || name === nativeCache) return { syncNativeChat(out, enabled) { nativeCalls.push({ out, enabled, scriptsBeforeSetup: scripts.length }); return { supported: true, changed: false }; } };
       return { fs: fakeFs, path: path.win32, os: { homedir: () => home },
         electron: { app, BrowserWindow: { getAllWindows: () => [{ webContents: wc }] } } }[name];
     },
     process: { pid: 1, execPath: "C:\\Code\\Code.exe", argv: options.argv || [], env: options.env || {} },
+    __dirname: appOut,
     console: { warn() {} }, setTimeout() {}
   });
   for (let i = 0; i < 10; i++) await Promise.resolve();
-  return { scripts, reads, wc, app, resource };
+  return { scripts, reads, wc, app, resource, nativeCalls };
 }
 
 for (const page of ["workbench.html", "workbench-jetski-agent.html", "workbench-dev.html",
@@ -83,4 +93,11 @@ test("an Agents window created after startup also receives RTL", async () => {
   h.wc.emit("did-finish-load");
   for (let i = 0; i < 10; i++) await Promise.resolve();
   assert.equal(h.scripts.length, 2);
+});
+
+test("native input is prepared before rendering and cached hooks are removed after uninstall", async () => {
+  const installed = await load("vscode-file://vscode-app/workbench.html", { native: "source" });
+  assert.deepEqual(installed.nativeCalls, [{ out: "C:\\Code\\resources\\app\\out", enabled: true, scriptsBeforeSetup: 0 }]);
+  const uninstalled = await load("about:blank", { native: "cached", uninstalled: true });
+  assert.deepEqual(uninstalled.nativeCalls, [{ out: "C:\\Code\\resources\\app\\out", enabled: false, scriptsBeforeSetup: 0 }]);
 });

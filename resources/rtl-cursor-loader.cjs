@@ -6,7 +6,7 @@
     var LOG_PREFIX = "[RTL Cursor Loader]";
     var homeDir = os.homedir();
     var LOG_FILE = path.join(homeDir, "rtl-cursor.log");
-    var LOADER_VERSION = "1.0.17";
+    var LOADER_VERSION = "1.0.18";
     var EXT_DIR_RE = /^(?:peyma|fusoft)\.rtl-cursor-(\d+)\.(\d+)\.(\d+)/;
 
     function log() {
@@ -54,6 +54,11 @@
         return 0;
     }
 
+    function isVSCodeApp() {
+        return /^(?:code(?: - insiders)?|code-insiders)\.exe$/i.test(path.basename(process.execPath || "")) ||
+            /^(?:code|visual studio code)(?: - insiders)?$/i.test(electron.app.getName ? electron.app.getName() : "");
+    }
+
     function findRtlScript() {
         var args = process.argv;
         var extDir = "";
@@ -71,8 +76,7 @@
         if (extDir) searchDirs.push(extDir);
         // Resolve VS Code from its own installation, even when a newer/older
         // copy is also installed in Cursor. Portable mode keeps extensions in data.
-        var isVSCode = /^(?:code(?: - insiders)?|code-insiders)\.exe$/i.test(path.basename(process.execPath || "")) ||
-            /^(?:code|visual studio code)(?: - insiders)?$/i.test(electron.app.getName ? electron.app.getName() : "");
+        var isVSCode = isVSCodeApp();
         if (isVSCode) {
             if (process.env && process.env.VSCODE_PORTABLE) searchDirs.push(path.join(process.env.VSCODE_PORTABLE, "extensions"));
             searchDirs.push(path.join(homeDir, /insiders/i.test(process.execPath || "") ? ".vscode-insiders" : ".vscode", "extensions"));
@@ -152,8 +156,7 @@
     function getRuntimeConfig(rtlPath) {
         var config = { editorRtl: "off" };
         try {
-            var isVSCode = /^(?:code(?: - insiders)?|code-insiders)\.exe$/i.test(path.basename(process.execPath || "")) ||
-                /^(?:code|visual studio code)(?: - insiders)?$/i.test(electron.app.getName ? electron.app.getName() : "");
+            var isVSCode = isVSCodeApp();
             var settingsPath = path.join(homeDir, isVSCode ? ".rtl-cursor-vscode" : ".rtl-cursor", "font-settings.json");
             var settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
             if (settings.loadBundledVazirmatn !== true) return config;
@@ -355,6 +358,21 @@
     function setupWindow(win, label) {
         if (!win || !win.webContents) { log(label, "no webContents"); return; }
         setupWebContents(win.webContents, label);
+    }
+
+    // Prepare the native editor engine before either workbench starts reading
+    // its bundle. The cached helper also removes native hooks after uninstall.
+    if (isVSCodeApp() && typeof __dirname === "string") {
+        try {
+            var nativeRtlPath = findRtlScript();
+            var sourceNativeHelper = nativeRtlPath ? path.join(path.dirname(nativeRtlPath), "rtl-vscode-native.cjs") : "";
+            var hasNativeSource = sourceNativeHelper && fs.existsSync(sourceNativeHelper);
+            var nativeHelper = hasNativeSource ? sourceNativeHelper : path.join(__dirname, "rtl-vscode-native.cjs");
+            if (fs.existsSync(nativeHelper)) {
+                var nativeResult = require(nativeHelper).syncNativeChat(__dirname, Boolean(hasNativeSource));
+                log("native chat input:", JSON.stringify(nativeResult));
+            }
+        } catch (nativeError) { log("native chat input setup failed:", nativeError.message); }
     }
 
     try {

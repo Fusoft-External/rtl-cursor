@@ -53,8 +53,16 @@ and report exactly which remaining step needs attention.
   the general editor RTL mode; keep RTL processing on displayed chat content.
   A test asserting that a prompt line becomes RTL is insufficient: assert zero
   extension-owned DOM/style mutations during mixed-language input and redraws.
+  Native RTL may be enabled through the editor's model direction engine, scoped
+  strictly to `chatSessionInput` / `sessions-chat` models; let Monaco own DOM,
+  caret movement and hit testing. Validate using a real Monaco instance, including
+  cursor arrows, mouse mapping, selection replacement and non-chat exclusion.
 - VS Code streaming prose must use native per-paragraph bidi (`unicode-bidi:
   plaintext` with `text-align: start`) in CSS scoped to native chat. Do not
   repeatedly classify these paragraphs by language majority or write `dir` while
   tokens arrive. Test actual text positions before and after mixed-language
   appends, not just computed styles; preserve Cursor/Antigravity behavior.
+- Run `npm run test:browser` with `CHROMIUM_PATH` pointing to a headless Chromium
+  executable. Set `MONACO_TEST_DIR` to an official extracted `monaco-editor`
+  package for the native input test and `RTL_VSCODE_CSS_PATH` to the installed
+  Agents/workbench CSS for chat layout checks; neither dependency is shipped.

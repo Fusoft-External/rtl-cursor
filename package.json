@@ -2,7 +2,7 @@
 	"name": "rtl-cursor",
 	"displayName": "RTL Cursor, VS Code & Antigravity",
 	"description": "Smart RTL for VS Code Chat and Agents, Cursor and Antigravity (Chat, Agent, Plan, Canvas, and Markdown). Preserves native fonts and user font settings. RTL text is right-aligned; code and English stay left-to-right.",
-	"version": "1.0.17",
+	"version": "1.0.18",
 	"publisher": "fusoft",
 	"license": "Apache-2.0",
 	"icon": "resources/icon.png",
@@ -81,8 +81,8 @@
 	},
 	"scripts": {
 		"package": "vsce package --no-dependencies --allow-missing-repository",
-		"test": "node --test tests/extension-restart.test.cjs tests/runtime-fonts.test.cjs tests/runtime-vscode.test.cjs",
-		"test:browser": "node --test tests/runtime-vscode-browser.test.cjs",
+		"test": "node --test tests/extension-restart.test.cjs tests/runtime-fonts.test.cjs tests/runtime-vscode.test.cjs tests/native-chat.test.cjs",
+		"test:browser": "node --test tests/runtime-vscode-browser.test.cjs tests/native-chat-browser.test.cjs",
 		"test:watcher": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tests/watcher.test.ps1",
 		"test:migration": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tests/migration.test.ps1"
 	}
