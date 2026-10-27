@@ -57,6 +57,10 @@ and report exactly which remaining step needs attention.
   strictly to `chatSessionInput` / `sessions-chat` models; let Monaco own DOM,
   caret movement and hit testing. Validate using a real Monaco instance, including
   cursor arrows, mouse mapping, selection replacement and non-chat exclusion.
+  Global LTR/code CSS must exclude `.interactive-input-editor .monaco-editor`;
+  ancestor bidi overrides can clip pure RTL input under the real workbench CSS.
+  The native browser test must load installed workbench CSS and assert pure
+  Persian glyph bounds remain inside the input, as well as mixed text behavior.
 - VS Code streaming prose must use native per-paragraph bidi (`unicode-bidi:
   plaintext` with `text-align: start`) in CSS scoped to native chat. Do not
   repeatedly classify these paragraphs by language majority or write `dir` while

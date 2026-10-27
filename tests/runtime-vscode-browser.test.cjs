@@ -66,6 +66,7 @@ test("VS Code messages stay bidirectional while Monaco owns prompt typing and la
         document.getElementById('streamLtr').append(document.createTextNode(' '+('متن فارسی که به پاسخ اضافه شده است ').repeat(10)));
         window.__cursorRtlSetEditorMode('always');
         const promptEditorMarked=document.querySelector('.interactive-input-editor .monaco-editor').hasAttribute('data-cursor-rtl-dir');
+        const fileEditorAlignmentDuringAlways=getComputedStyle(document.getElementById('editor')).textAlign;
         window.__cursorRtlSetEditorMode('off');
         document.getElementById('promptText').firstChild.data = 'English prompt';
         document.getElementById('promptText').dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));
@@ -78,7 +79,7 @@ test("VS Code messages stay bidirectional while Monaco owns prompt typing and la
         const input=document.getElementById('freeform'); input.value='پاسخ فارسی'; input.dispatchEvent(new Event('input',{bubbles:true}));
         setTimeout(() => {
           const result = document.createElement('pre'); result.id='results';
-          result.textContent=encodeURIComponent(JSON.stringify({initial,initialSelection,promptEditorMarked,promptMutations:window.promptMutations,streamMutations:window.streamMutations,beforeScan,beforeStream,afterStream:{rtl:anchorPosition('rtlAnchor'),ltr:anchorPosition('ltrAnchor')},redrawnPrompt:snapshot('redrawnPrompt'),changed:snapshot('english'),prompt:snapshot('prompt'),streamedAtInsert,streamed:snapshot('streamed'),freeform:snapshot('freeform')}));
+          result.textContent=encodeURIComponent(JSON.stringify({initial,initialSelection,promptEditorMarked,fileEditorAlignmentDuringAlways,promptMutations:window.promptMutations,streamMutations:window.streamMutations,beforeScan,beforeStream,afterStream:{rtl:anchorPosition('rtlAnchor'),ltr:anchorPosition('ltrAnchor')},redrawnPrompt:snapshot('redrawnPrompt'),changed:snapshot('english'),prompt:snapshot('prompt'),streamedAtInsert,streamed:snapshot('streamed'),freeform:snapshot('freeform')}));
           document.body.append(result);
         }, 400);
       }, 400);
@@ -118,6 +119,7 @@ test("VS Code messages stay bidirectional while Monaco owns prompt typing and la
     assert.equal(data.prompt.dir, null, "Mixed-language typing stays under Monaco's control");
     assert.equal(data.redrawnPrompt.dir, null, "Monaco redraws are not patched");
     assert.equal(data.promptEditorMarked, false, "Editor RTL mode never flips the chat prompt");
+    assert.equal(data.fileEditorAlignmentDuringAlways, "right", "The prompt CSS exclusion preserves optional file-editor RTL alignment");
     assert.deepEqual(data.promptMutations, [], "No direction or style writes inside the prompt, including during composition");
     assert.deepEqual(data.initialSelection, {node:"promptText",offset:2}, "The initial RTL scan preserves the selection");
     assert.equal(data.freeform.dir, "auto", "Native textareas follow input without DOM mutations");

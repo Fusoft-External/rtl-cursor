@@ -29,7 +29,7 @@
 
 ### نصب آفلاین از طریق فایل VSIX:
 
-1. فایل `releases/rtl-cursor-1.0.18.vsix` را دانلود کنید (یا از [Releases گیت‌هاب](https://github.com/Fusoft-External/rtl-cursor/releases)).
+1. فایل `releases/rtl-cursor-1.0.19.vsix` را دانلود کنید (یا از [Releases گیت‌هاب](https://github.com/Fusoft-External/rtl-cursor/releases)).
 2. در ادیتور (VS Code، Cursor یا Antigravity IDE) کلیدهای **`Ctrl + Shift + P`** را فشار دهید.
 3. دستور **`Extensions: Install from VSIX...`** را جستجو و فایل VSIX را انتخاب کنید.
 4. روی دکمهٔ نوار وضعیت پایین صفحه کلیک کرده یا دستور **`RTL Cursor: Enable`** را اجرا نمایید.
@@ -84,6 +84,15 @@ powershell.exe -NoProfile -File .\update-agent-watcher.ps1
 - **بررسی لاگ‌ها:** گزارش لودر در `%USERPROFILE%\rtl-cursor.log` و گزارش مراقب پس‌زمینه در `%USERPROFILE%\rtl-cursor-watch.log` ذخیره می‌شود.
 
 ---
+
+## تغییرات نسخه ۱.۰.۱۹
+
+- رفع پنهان‌شدن متن کاملاً فارسی در کادر تایپ VS Code؛ قانون عمومی LTR و `unicode-bidi: plaintext` کدها دیگر به ریشهٔ ورودی Monaco اعمال نمی‌شود.
+- حفظ کنترل جهت، رسم متن، مکان‌نما و کلیک در موتور بومی Monaco؛ بدون دست‌کاری خطوط ورودی و بدون تغییر فونت یا متن کاربر.
+- بازتولید ایراد با CSS واقعی Agents: پیش از اصلاح، متن فارسی به مختصات منفی و بیرون کادر می‌رفت؛ پس از اصلاح، محدودهٔ همهٔ حروف داخل کادر باقی می‌ماند.
+- گسترش تست واقعی ورودی به جمله‌های صرفاً فارسی، علائم نگارشی و متن ترکیبی با فونت‌های Consolas، Segoe UI و Vazirmatn. آزمون بومی اکنون به CSS واقعی workbench نیاز دارد تا تداخل‌های رابط را هم بررسی کند.
+
+بعد از نصب، همهٔ پنجره‌های VS Code و Agents را کامل ببندید و دوباره باز کنید تا قوانین CSS نسخهٔ قبلی از حافظه خارج شوند.
 
 ## تغییرات نسخه ۱.۰.۱۸
 

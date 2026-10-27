@@ -250,7 +250,7 @@
         pre,
         .markdown-code-outer-container,
         .cursor-code-block-content,
-        .monaco-editor {
+        .monaco-editor:where(:not(.interactive-input-editor .monaco-editor)) {
             direction: ltr !important;
             text-align: left !important;
             unicode-bidi: plaintext !important;
