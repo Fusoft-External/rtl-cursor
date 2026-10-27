@@ -1041,7 +1041,6 @@
 
     // Native VS Code Agent/Copilot chat, including Codex in the Agents window.
     // Scope Markdown to chat so editor previews and unrelated UI retain ownership.
-    var VSCODE_PROMPT_LINE = '.interactive-input-part .interactive-input-editor .view-line';
     var VSCODE_TEXT_SELECTOR = [
         '.chat-request-text', '.chat-thinking-text', '.chat-thinking-title-detail-text',
         '.chat-question-title', '.chat-question-description', '.chat-question-detailed-message',
@@ -1053,8 +1052,7 @@
         '.chat-todo-list-widget .todo-list-title',
         '.agent-session-title', '.agent-session-chat-title', '.agent-session-description',
         '.session-title', '.session-chat-title', '.session-description',
-        '.agent-feedback-widget-text', '.agent-feedback-widget-reply-text',
-        VSCODE_PROMPT_LINE
+        '.agent-feedback-widget-text', '.agent-feedback-widget-reply-text'
     ].concat(['p', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'ul', 'ol', 'table', 'th', 'td'].map(function(tag) {
         return '.interactive-session .rendered-markdown ' + tag;
     })).join(', ');
@@ -1075,7 +1073,10 @@
         if (el.closest(CODE_EXCLUDE)) return true;
         if (el.closest(CANVAS_MEDIA_EXCLUDE)) return true;
         if (el.closest('.xterm, .chat-codeblock, .monaco-diff-editor')) return true;
-        if (el.closest('.monaco-editor') && !el.closest(PLAN_CONTEXT) && !el.closest(VSCODE_PROMPT_LINE)) return true;
+        // Monaco owns input layout, cursor geometry and composition. Mutating
+        // its rendered prompt lines makes typing jump as it redraws those lines.
+        if (el.closest('.interactive-input-editor')) return true;
+        if (el.closest('.monaco-editor') && !el.closest(PLAN_CONTEXT)) return true;
         if (el.closest('.node-mermaid')) return true;
         var tiptap = el.closest('.tiptap.ProseMirror');
         return Boolean(tiptap && !tiptap.closest(TIPTAP_PLAN_ALLOW) && !tiptap.closest(TIPTAP_PROMPT_ALLOW));
@@ -1659,6 +1660,7 @@
     //   'always' – force every code editor RTL
     //   'off'    – never touch the code editor
     var EDITOR_EXCLUDE_SELECTOR = [
+        '.interactive-input-editor',
         '.composer-rendered-message',
         '.markdown-root',
         '.markdown-section',

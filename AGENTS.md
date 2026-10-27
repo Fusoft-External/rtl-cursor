@@ -47,3 +47,9 @@ and report exactly which remaining step needs attention.
 - Font settings belong to the editor and user. Bundled Vazirmatn loading is
   optional and disabled by default; registering a font must not force it through
   CSS, inline styles, or changes to the user's editor settings.
+- VS Code's Monaco prompt (`.interactive-input-editor`) owns its rendered lines,
+  cursor geometry, selection and IME composition. Never set RTL attributes or
+  override direction/alignment on its `.view-line` elements, including through
+  the general editor RTL mode; keep RTL processing on displayed chat content.
+  A test asserting that a prompt line becomes RTL is insufficient: assert zero
+  extension-owned DOM/style mutations during mixed-language input and redraws.

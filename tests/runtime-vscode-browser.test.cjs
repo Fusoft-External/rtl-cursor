@@ -7,7 +7,7 @@ const { pathToFileURL } = require("node:url");
 const { spawnSync } = require("node:child_process");
 const test = require("node:test");
 
-test("native VS Code Agent content stays bidirectional during streaming and typing", {
+test("VS Code messages stay bidirectional while Monaco owns prompt typing and layout", {
   skip: !process.env.CHROMIUM_PATH && "Set CHROMIUM_PATH to run the real Chromium layout regression"
 }, () => {
   const runtime = fs.readFileSync(path.join(__dirname, "../resources/rtl.js"), "utf8");
@@ -39,18 +39,32 @@ test("native VS Code Agent content stays bidirectional during streaming and typi
       </div><span id="title" class="session-title">عنوان نشست فارسی</span>
       <div class="monaco-editor"><div id="editor" class="view-line">کد فارسی</div></div>
       <div class="rendered-markdown"><p id="unrelated">بیرون از چت</p></div></div>
+      <script>
+      window.promptMutations=[];
+      const promptRoot=document.querySelector('.interactive-input-editor');
+      new MutationObserver(records => window.promptMutations.push(...records.map(m => ({attribute:m.attributeName,id:m.target.id})))).observe(promptRoot,{attributes:true,subtree:true,attributeFilter:['dir','style','data-cursor-rtl-vscode','data-cursor-rtl-dir']});
+      const caret=document.createRange(); caret.setStart(document.getElementById('promptText').firstChild,2); caret.collapse(true); getSelection().addRange(caret);
+      </script>
       <script>${runtime}</script>
       <script>
       const snapshot = (id) => { const el = document.getElementById(id); const s = getComputedStyle(el); return {dir:el.getAttribute('dir'), direction:s.direction, align:s.textAlign, font:s.fontFamily}; };
       setTimeout(() => {
         const initial = Object.fromEntries(['request','persian','english','list','cell','englishCell','question','option','englishOption','freeform','prompt','todo','title','terminal','editor','unrelated','codeLine','inline','pre'].map(id => [id, snapshot(id)]));
+        const initialSelection={node:getSelection().anchorNode.parentElement.id,offset:getSelection().anchorOffset};
+        window.__cursorRtlSetEditorMode('always');
+        const promptEditorMarked=document.querySelector('.interactive-input-editor .monaco-editor').hasAttribute('data-cursor-rtl-dir');
+        window.__cursorRtlSetEditorMode('off');
         document.getElementById('promptText').firstChild.data = 'English prompt';
+        document.getElementById('promptText').dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));
+        document.getElementById('promptText').firstChild.data = 'فارسی با English در حال تایپ';
+        document.getElementById('promptText').dispatchEvent(new CompositionEvent('compositionend',{bubbles:true,data:'فارسی'}));
+        const newLine=document.createElement('div'); newLine.className='view-line'; newLine.id='redrawnPrompt'; newLine.textContent='خط جدید فارسی'; document.getElementById('prompt').after(newLine);
         document.getElementById('english').firstChild.data = 'این پاسخ حالا فارسی شد';
         const added = document.createElement('p'); added.id='streamed'; added.textContent='پاسخ جدید در حال دریافت است'; document.getElementById('answer').append(added);
         const input=document.getElementById('freeform'); input.value='پاسخ فارسی'; input.dispatchEvent(new Event('input',{bubbles:true}));
         setTimeout(() => {
           const result = document.createElement('pre'); result.id='results';
-          result.textContent=encodeURIComponent(JSON.stringify({initial,changed:snapshot('english'),prompt:snapshot('prompt'),streamed:snapshot('streamed'),freeform:snapshot('freeform')}));
+          result.textContent=encodeURIComponent(JSON.stringify({initial,initialSelection,promptEditorMarked,promptMutations:window.promptMutations,redrawnPrompt:snapshot('redrawnPrompt'),changed:snapshot('english'),prompt:snapshot('prompt'),streamed:snapshot('streamed'),freeform:snapshot('freeform')}));
           document.body.append(result);
         }, 400);
       }, 400);
@@ -62,17 +76,21 @@ test("native VS Code Agent content stays bidirectional during streaming and typi
     const match = result.stdout.match(/<pre id="results">([^<]+)<\/pre>/);
     assert.ok(match, "The complete runtime must execute and finish its browser checks: " + result.stderr + result.stdout.slice(-1600));
     const data = JSON.parse(decodeURIComponent(match[1]));
-    for (const id of ["request", "persian", "list", "cell", "question", "option", "prompt", "todo", "title"]) {
+    for (const id of ["request", "persian", "list", "cell", "question", "option", "todo", "title"]) {
       assert.equal(data.initial[id].dir, "rtl", id);
       assert.equal(data.initial[id].direction, "rtl", id);
       assert.equal(data.initial[id].align, "right", id);
     }
     for (const id of ["english", "englishCell", "englishOption", "inline", "pre"]) assert.equal(data.initial[id].direction, "ltr", id);
-    for (const id of ["editor", "codeLine", "terminal", "unrelated"]) assert.equal(data.initial[id].dir, null, id);
+    for (const id of ["editor", "codeLine", "terminal", "unrelated", "prompt"]) assert.equal(data.initial[id].dir, null, id);
     assert.equal(data.initial.persian.font, "Arial", "No font override");
     assert.equal(data.changed.dir, "rtl", "Streaming updates existing paragraphs");
     assert.equal(data.streamed.dir, "rtl", "Streaming adds new paragraphs");
-    assert.equal(data.prompt.dir, "ltr", "Typing updates the Monaco prompt line");
+    assert.equal(data.prompt.dir, null, "Mixed-language typing stays under Monaco's control");
+    assert.equal(data.redrawnPrompt.dir, null, "Monaco redraws are not patched");
+    assert.equal(data.promptEditorMarked, false, "Editor RTL mode never flips the chat prompt");
+    assert.deepEqual(data.promptMutations, [], "No direction or style writes inside the prompt, including during composition");
+    assert.deepEqual(data.initialSelection, {node:"promptText",offset:2}, "The initial RTL scan preserves the selection");
     assert.equal(data.freeform.dir, "auto", "Native textareas follow input without DOM mutations");
     assert.equal(data.freeform.direction, "rtl");
   } finally {
