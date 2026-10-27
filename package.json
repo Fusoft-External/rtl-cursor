@@ -2,7 +2,7 @@
 	"name": "rtl-cursor",
 	"displayName": "RTL Cursor, VS Code & Antigravity",
 	"description": "Smart RTL for VS Code Chat and Agents, Cursor and Antigravity (Chat, Agent, Plan, Canvas, and Markdown). Preserves native fonts and user font settings. RTL text is right-aligned; code and English stay left-to-right.",
-	"version": "1.0.19",
+	"version": "1.0.15",
 	"publisher": "fusoft",
 	"license": "Apache-2.0",
 	"icon": "resources/icon.png",
