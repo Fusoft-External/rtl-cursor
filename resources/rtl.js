@@ -67,6 +67,42 @@
 
         /* Preserve each surface's native font and the user's font settings. */
 
+        /* VS Code Chat and the separate Agents window use the same native
+           components. Apply direction to content blocks, never to the workbench. */
+        [data-cursor-rtl-vscode][dir="rtl"] {
+            direction: rtl !important;
+            text-align: right !important;
+            unicode-bidi: plaintext !important;
+        }
+        [data-cursor-rtl-vscode][dir="ltr"] {
+            direction: ltr !important;
+            text-align: left !important;
+            unicode-bidi: plaintext !important;
+        }
+        [data-cursor-rtl-vscode][dir="auto"] {
+            text-align: start !important;
+            unicode-bidi: plaintext !important;
+        }
+        .interactive-session .rendered-markdown :is(ul, ol)[dir] {
+            padding-inline-start: 24px !important;
+            padding-inline-end: 0 !important;
+        }
+        .interactive-session .rendered-markdown :is(code, pre),
+        .interactive-session .chat-codeblock,
+        .interactive-session .xterm {
+            direction: ltr !important;
+            text-align: left !important;
+            unicode-bidi: isolate !important;
+        }
+        .interactive-session .rendered-markdown :not(pre) > code {
+            display: inline-block;
+            max-width: 100%;
+        }
+        .chat-question-list-item[data-cursor-rtl-vscode][dir="rtl"] .chat-question-list-indicator {
+            margin-left: 0 !important;
+            margin-inline-start: auto !important;
+        }
+
         .aislash-editor-placeholder {
             right: 15px !important;
             left: auto !important;
@@ -1003,6 +1039,27 @@
         '#root [data-cursor-rtl-canvas-text="true"]'
     ].join(', ');
 
+    // Native VS Code Agent/Copilot chat, including Codex in the Agents window.
+    // Scope Markdown to chat so editor previews and unrelated UI retain ownership.
+    var VSCODE_PROMPT_LINE = '.interactive-input-part .interactive-input-editor .view-line';
+    var VSCODE_TEXT_SELECTOR = [
+        '.chat-request-text', '.chat-thinking-text', '.chat-thinking-title-detail-text',
+        '.chat-question-title', '.chat-question-description', '.chat-question-detailed-message',
+        '.chat-question-list-item', '.chat-question-list-label-title', '.chat-question-list-label-desc',
+        '.chat-question-summary-question-value', '.chat-question-summary-answer-value',
+        '.chat-question-summary-option-label', '.chat-question-summary-option-details',
+        '.chat-question-freeform-textarea', '.chat-confirmation-widget-title-inner',
+        '.chat-confirmation-widget-message', '.chat-todo-list-widget .todo-content',
+        '.chat-todo-list-widget .todo-list-title',
+        '.agent-session-title', '.agent-session-chat-title', '.agent-session-description',
+        '.session-title', '.session-chat-title', '.session-description',
+        '.agent-feedback-widget-text', '.agent-feedback-widget-reply-text',
+        VSCODE_PROMPT_LINE
+    ].concat(['p', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'ul', 'ol', 'table', 'th', 'td'].map(function(tag) {
+        return '.interactive-session .rendered-markdown ' + tag;
+    })).join(', ');
+    DIR_SELECTOR += ', ' + VSCODE_TEXT_SELECTOR;
+
     /* Containers whose children manage their own DOM (mermaid diagrams and most
        TipTap editors). Plan-rendered TipTap content and Agent Window prompt input
        are allowed below because they need per-element direction while editing. */
@@ -1017,7 +1074,8 @@
         if (!el) return false;
         if (el.closest(CODE_EXCLUDE)) return true;
         if (el.closest(CANVAS_MEDIA_EXCLUDE)) return true;
-        if (el.closest('.monaco-editor') && !el.closest(PLAN_CONTEXT)) return true;
+        if (el.closest('.xterm, .chat-codeblock, .monaco-diff-editor')) return true;
+        if (el.closest('.monaco-editor') && !el.closest(PLAN_CONTEXT) && !el.closest(VSCODE_PROMPT_LINE)) return true;
         if (el.closest('.node-mermaid')) return true;
         var tiptap = el.closest('.tiptap.ProseMirror');
         return Boolean(tiptap && !tiptap.closest(TIPTAP_PLAN_ALLOW) && !tiptap.closest(TIPTAP_PROMPT_ALLOW));
@@ -1257,7 +1315,7 @@
         /* The history search box is a real <input>: typing changes only its
            value (no DOM mutation), so a scan-time rtl/ltr decision would go
            stale. dir="auto" lets the browser follow the value natively. */
-        if (el.matches && el.matches('.compact-agent-history-search-input')) return 'auto';
+        if (el.matches && el.matches('.compact-agent-history-search-input, .chat-question-freeform-textarea')) return 'auto';
         if (el.matches && el.matches('ol, ul')) return getListDir(el);
         if (el.matches && el.matches('table')) return getTableDir(el);
         var optionDir = getQuestionnaireOptionDir(el);
@@ -1267,6 +1325,7 @@
     }
 
     function setManagedDirection(el, desiredDir) {
+        if (el.matches(VSCODE_TEXT_SELECTOR)) el.setAttribute('data-cursor-rtl-vscode', 'true');
         el.setAttribute('dir', desiredDir);
     }
 
@@ -1283,6 +1342,9 @@
         if (isInsidePlanEditorContent(el)) return false;
         var desiredDir = getDesiredDir(el);
         var currentDir = el.getAttribute('dir');
+        if (el.matches(VSCODE_TEXT_SELECTOR) && !el.hasAttribute('data-cursor-rtl-vscode')) {
+            el.setAttribute('data-cursor-rtl-vscode', 'true');
+        }
         if (currentDir === desiredDir) {
             return false;
         }

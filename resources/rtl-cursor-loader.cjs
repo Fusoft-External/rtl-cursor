@@ -6,7 +6,7 @@
     var LOG_PREFIX = "[RTL Cursor Loader]";
     var homeDir = os.homedir();
     var LOG_FILE = path.join(homeDir, "rtl-cursor.log");
-    var LOADER_VERSION = "1.0.14";
+    var LOADER_VERSION = "1.0.15";
     var EXT_DIR_RE = /^(?:peyma|fusoft)\.rtl-cursor-(\d+)\.(\d+)\.(\d+)/;
 
     function log() {
@@ -69,7 +69,14 @@
         }
         var searchDirs = [];
         if (extDir) searchDirs.push(extDir);
-        searchDirs.push(
+        // Resolve VS Code from its own installation, even when a newer/older
+        // copy is also installed in Cursor. Portable mode keeps extensions in data.
+        var isVSCode = /^(?:code(?: - insiders)?|code-insiders)\.exe$/i.test(path.basename(process.execPath || "")) ||
+            /^(?:code|visual studio code)(?: - insiders)?$/i.test(electron.app.getName ? electron.app.getName() : "");
+        if (isVSCode) {
+            if (process.env && process.env.VSCODE_PORTABLE) searchDirs.push(path.join(process.env.VSCODE_PORTABLE, "extensions"));
+            searchDirs.push(path.join(homeDir, /insiders/i.test(process.execPath || "") ? ".vscode-insiders" : ".vscode", "extensions"));
+        } else searchDirs.push(
             path.join(homeDir, ".cursor", "extensions"),
             path.join(homeDir, ".antigravity-ide", "extensions"),
             path.join(homeDir, ".antigravity", "extensions"),
@@ -102,7 +109,8 @@
         return typeof url === "string" && (
             url.indexOf("workbench.html") !== -1 ||
             url.indexOf("workbench-jetski-agent") !== -1 ||
-            url.indexOf("workbench-dev.html") !== -1
+            url.indexOf("workbench-dev.html") !== -1 ||
+            /(?:^|\/)vs\/sessions\/electron-browser\/sessions(?:-dev)?\.html(?:[?#]|$)/.test(url)
         );
     }
 
@@ -144,7 +152,9 @@
     function getRuntimeConfig(rtlPath) {
         var config = { editorRtl: "off" };
         try {
-            var settingsPath = path.join(homeDir, ".rtl-cursor", "font-settings.json");
+            var isVSCode = /^(?:code(?: - insiders)?|code-insiders)\.exe$/i.test(path.basename(process.execPath || "")) ||
+                /^(?:code|visual studio code)(?: - insiders)?$/i.test(electron.app.getName ? electron.app.getName() : "");
+            var settingsPath = path.join(homeDir, isVSCode ? ".rtl-cursor-vscode" : ".rtl-cursor", "font-settings.json");
             var settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
             if (settings.loadBundledVazirmatn !== true) return config;
             var fontDir = path.join(path.dirname(rtlPath), "fonts");

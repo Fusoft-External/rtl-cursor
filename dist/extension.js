@@ -46,11 +46,15 @@ var repairTimer;
 var repairInFlight = false;
 var repairGeneration = 0;
 var WATCH_RUN_VALUE = "RtlCursorWatch";
+function isVSCodeHost() {
+  return /(?:^|[\\/])(?:Microsoft VS Code(?: Insiders)?|code(?:-insiders)?)(?:[\\/]|$)/i.test(vscode2.env.appRoot) ||
+    /^(?:Visual Studio Code|Code)(?: - Insiders)?$/i.test(vscode2.env.appName || "");
+}
 function enabledFlagPath() {
-  return pathUser.join(os.homedir(), ".rtl-cursor-enabled");
+  return pathUser.join(os.homedir(), isVSCodeHost() ? ".rtl-cursor-vscode-enabled" : ".rtl-cursor-enabled");
 }
 function watchStateDir() {
-  return pathUser.join(os.homedir(), ".rtl-cursor");
+  return pathUser.join(os.homedir(), isVSCodeHost() ? ".rtl-cursor-vscode" : ".rtl-cursor");
 }
 function syncFontSettings() {
   const stateDir = watchStateDir();
@@ -452,7 +456,7 @@ function isEditorUpdateInProgress(mainJsPath = getMainJsPath()) {
   if (process.platform !== "win32") return false;
   const installRoot = pathUser.resolve(pathUser.dirname(mainJsPath), "..", "..", "..");
   try {
-    return [updateActiveManifestPath(), pathUser.join(installRoot, "_"), pathUser.join(installRoot, "_bak")]
+    return [...(isVSCodeHost() ? [] : [updateActiveManifestPath()]), pathUser.join(installRoot, "_"), pathUser.join(installRoot, "_bak")]
       .some((candidate) => fs3.existsSync(candidate));
   } catch {
     return true;
@@ -485,7 +489,7 @@ async function stopManagedWatchProcess() {
   try { fs3.unlinkSync(pidFile); } catch {}
 }
 async function installBackgroundWatch(extensionPath) {
-  if (process.platform !== "win32") {
+  if (process.platform !== "win32" || isVSCodeHost()) {
     return;
   }
   if (watchInstallInFlight) return watchInstallInFlight;
@@ -553,6 +557,7 @@ async function installBackgroundWatchNow(extensionPath) {
   }
 }
 async function stopBackgroundWatch() {
+  if (isVSCodeHost()) return;
   if (process.platform !== "win32") {
     return;
   }
@@ -574,8 +579,9 @@ async function scheduleEditorRelaunch() {
     if (process.platform === "win32") {
       const quote = (value) => String(value).replace(/'/g, "''");
       const installRoot = pathUser.dirname(exePath);
+      const cursorUpdateGuard = isVSCodeHost() ? "" : `(Test-Path -LiteralPath '${quote(updateActiveManifestPath())}') -or `;
       // Wait for graceful exit (including save dialogs) and any updater, never force an editor to close.
-      const psScript = `$ErrorActionPreference='Stop'; $exe='${quote(exePath)}'; $deadline=[DateTime]::UtcNow.AddSeconds(120); do { $running=@(Get-Process -Name '${quote(pathUser.basename(exePath, ".exe"))}' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe }); $updating=(Test-Path -LiteralPath '${quote(updateActiveManifestPath())}') -or (Test-Path -LiteralPath '${quote(pathUser.join(installRoot, "_"))}') -or (Test-Path -LiteralPath '${quote(pathUser.join(installRoot, "_bak"))}'); if ($running.Count -eq 0 -and -not $updating) { break }; if ([DateTime]::UtcNow -ge $deadline) { exit 0 }; Start-Sleep -Milliseconds 250 } while ($true); Start-Process -FilePath $exe -ErrorAction Stop`;
+      const psScript = `$ErrorActionPreference='Stop'; $exe='${quote(exePath)}'; $deadline=[DateTime]::UtcNow.AddSeconds(120); do { $running=@(Get-Process -Name '${quote(pathUser.basename(exePath, ".exe"))}' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe }); $updating=${cursorUpdateGuard}(Test-Path -LiteralPath '${quote(pathUser.join(installRoot, "_"))}') -or (Test-Path -LiteralPath '${quote(pathUser.join(installRoot, "_bak"))}'); if ($running.Count -eq 0 -and -not $updating) { break }; if ([DateTime]::UtcNow -ge $deadline) { exit 0 }; Start-Sleep -Milliseconds 250 } while ($true); Start-Process -FilePath $exe -ErrorAction Stop`;
       const encoded = Buffer.from(psScript, "utf16le").toString("base64");
       executable = "powershell.exe";
       args = [

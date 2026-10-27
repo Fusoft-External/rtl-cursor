@@ -141,7 +141,7 @@ function createHarness(options = {}) {
     }
   };
   const vscode = {
-    env: { appRoot },
+    env: { appRoot, ...options.env },
     StatusBarAlignment: { Right: 2 },
     ThemeColor: function ThemeColor(id) { this.id = id; },
     commands: {
@@ -575,3 +575,26 @@ test("opting into and out of bundled fonts persists the preference without resta
 });
 
 module.exports = { createHarness, decodePowerShell, validatePowerShell };
+
+test("VS Code has independent enable/font state and never controls Cursor's background watcher", async () => {
+  const harness = createHarness({ env: { appName: "Visual Studio Code" }, config: { autoReapply: false } });
+  assert.match(harness.sandbox.enabledFlagPath(), /\.rtl-cursor-vscode-enabled$/);
+  assert.match(harness.sandbox.watchStateDir(), /\.rtl-cursor-vscode$/);
+  harness.sandbox.module.exports.activate(harness.context);
+  await harness.settle();
+  await harness.sandbox.stopBackgroundWatch();
+  assert.equal(harness.spawnCalls.length, 0);
+  assert.equal(harness.execCalls.length, 0);
+  assert.equal(harness.files.get(windowsPath.join(home, ".rtl-cursor-enabled")), "1");
+  assert.ok(harness.files.has(windowsPath.join(home, ".rtl-cursor-vscode", "font-settings.json")));
+});
+
+test("a Cursor update does not block VS Code patching or restart", async () => {
+  const harness = createHarness({ env: { appName: "Visual Studio Code" } });
+  harness.setFile(harness.sandbox.updateActiveManifestPath(), "{}");
+  assert.equal(harness.sandbox.isEditorUpdateInProgress(), false);
+  await harness.sandbox.scheduleEditorRelaunch();
+  const script = decodePowerShell(harness.spawnCalls[0]);
+  assert.doesNotMatch(script, /update-supervisor/);
+  validatePowerShell(script);
+});
