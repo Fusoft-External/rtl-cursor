@@ -1,0 +1,13 @@
+{
+  "name": "rtl-cursor-ci",
+  "private": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@vscode/vsce": "4.0.0",
+    "monaco-editor": "0.57.0",
+    "playwright": "1.64.1",
+    "rtl-cursor": "file:../.."
+  }
+}

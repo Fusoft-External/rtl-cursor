@@ -63,6 +63,24 @@ powershell.exe -NoProfile -File .\update-agent-watcher.ps1
 
 ---
 
+## ساخت و انتشار خودکار در گیت‌هاب
+
+گردش‌کار [Build and release VSIX](https://github.com/Fusoft-External/rtl-cursor/actions/workflows/build-release.yml) روی GitHub Actions اجرا می‌شود. یک VSIX مشترک برای VS Code، Cursor و Antigravity ساخته می‌شود.
+
+- با Push روی `main` یا بازکردن Pull Request، تست‌های JavaScript، مراقب و مهاجرت ویندوز و تست واقعی Chromium/Monaco اجرا می‌شوند؛ سپس VSIX از همان سورس ساخته و محتوای بسته و مجوزها بررسی می‌شوند.
+- خروجی از بخش Artifacts همان اجرا، با نام `rtl-cursor-<version>`، تا ۱۴ روز قابل دریافت است. گزینهٔ **Run workflow** هم ساخت دستی را بدون انتشار ریلیز اجرا می‌کند.
+- برای انتشار نسخهٔ بعدی، شماره را در `package.json` و لودر و یادداشت‌های همین فایل هماهنگ کنید، تغییرات را Commit و Push کنید و تگ همان نسخه را بفرستید؛ برای نمونه، پس از آماده‌کردن نسخهٔ ۱.۰.۱۸:
+
+```powershell
+git push origin main
+git tag v1.0.18
+git push origin v1.0.18
+```
+
+بعد از موفقیت همهٔ بررسی‌ها، تگ نسخه ریلیز GitHub را به‌صورت خودکار با VSIX، ابزار `update-agent-watcher.ps1` و فایل `SHA256SUMS.txt` منتشر می‌کند. متن ریلیز از بخش تغییرات همان نسخه در این فایل گرفته می‌شود. شمارهٔ تگ باید با بسته و لودر یکسان باشد؛ ریلیز موجود جایگزین نمی‌شود. انتشار از توکن داخلی GitHub Actions با دسترسی `contents: write` استفاده می‌کند و به توکن شخصی نیاز ندارد. این گردش‌کار در Marketplace انتشار انجام نمی‌دهد.
+
+---
+
 ## دستورات افزونه در Command Palette
 
 | دستور | عملکرد |

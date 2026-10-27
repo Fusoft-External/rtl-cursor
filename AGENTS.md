@@ -34,6 +34,15 @@ Use existing Git/GitHub authentication without printing or committing secrets.
 If authentication or access blocks publication, keep the completed local work
 and report exactly which remaining step needs attention.
 
+For subsequent automated releases, prefer `.github/workflows/build-release.yml`:
+push the versioned source commit to `main`, then push `v<version>` on that exact
+commit. Actions runs all checks, builds and inspects the VSIX from the tagged
+source, and publishes the three required assets with notes from `readme.md`.
+The local VSIX build/commit steps above apply to manual packaging; the CI-built
+VSIX is authoritative for automated releases. Main/PR/manual runs only upload
+build artifacts and do not publish or replace an existing release. CI-only
+changes do not require changing the extension version or moving its current tag.
+
 ## Repository notes
 
 - The shipped extension entry point is `dist/extension.js`; this checkout does
