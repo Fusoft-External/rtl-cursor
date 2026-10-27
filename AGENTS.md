@@ -61,6 +61,10 @@ and report exactly which remaining step needs attention.
   ancestor bidi overrides can clip pure RTL input under the real workbench CSS.
   The native browser test must load installed workbench CSS and assert pure
   Persian glyph bounds remain inside the input, as well as mixed text behavior.
+- Agents uses `.sessions-chat-editor` for its new-session composer rather than
+  `.interactive-input-editor`. Exclude both from global code bidi CSS, DOM
+  scanning and file-editor RTL modes. Test both real Monaco wrappers with the
+  installed Agents CSS, including the revealed welcome composer and redraws.
 - VS Code streaming prose must use native per-paragraph bidi (`unicode-bidi:
   plaintext` with `text-align: start`) in CSS scoped to native chat. Do not
   repeatedly classify these paragraphs by language majority or write `dir` while

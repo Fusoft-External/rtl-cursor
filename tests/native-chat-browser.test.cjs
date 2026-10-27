@@ -3,11 +3,16 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const http = require("node:http");
+const os = require("node:os");
 const { spawn } = require("node:child_process");
 const test = require("node:test");
 const { patchBundle } = require("../resources/rtl-vscode-native.cjs");
 
-test("real Monaco keeps Persian input, native caret arrows and mouse mapping in sync", {
+for (const surface of [
+  { name: "existing chat", scheme: "chatSessionInput", open: '<div class="interactive-session"><div class="interactive-input-part"><div class="chat-input-container"><div class="chat-editor-container"><div class="interactive-input-editor">', close: '</div></div></div></div></div>' },
+  { name: "Agents new chat", scheme: "sessions-chat", open: '<div class="new-chat-widget-container revealed"><div class="new-chat-widget-content"><div class="new-chat-input-container"><div class="new-chat-input-area-wrapper"><div class="new-chat-input-area"><div class="sessions-chat-editor">', close: '</div></div></div></div></div></div>' }
+]) {
+test(`real Monaco keeps Persian visible with native editing in ${surface.name}`, {
   skip: (!process.env.CHROMIUM_PATH || !process.env.MONACO_TEST_DIR || !process.env.RTL_VSCODE_CSS_PATH) && "Set CHROMIUM_PATH, MONACO_TEST_DIR and RTL_VSCODE_CSS_PATH for a real workbench/input regression"
 }, async () => {
   const packageRoot = path.resolve(process.env.MONACO_TEST_DIR);
@@ -21,14 +26,14 @@ test("real Monaco keeps Persian input, native caret arrows and mouse mapping in 
     if (source.includes("_getTextDirection(")) patchedModule = { file, source: patchBundle(source) };
   }
   assert.ok(patchedModule, "The real engine must expose the production hook");
-  const html = `<!doctype html><meta charset="utf-8"><style>${workbenchCss}</style><style>body{margin:0}#input,#file{width:900px;height:180px}</style>
-    <div class="monaco-workbench windows agent-sessions-workbench"><div class="interactive-session"><div class="interactive-input-part"><div class="chat-input-container"><div class="chat-editor-container"><div class="interactive-input-editor"><div id="input"></div></div></div></div></div></div></div><div id="file"></div>
-    <script>window.__cursorRtlConfig={editorRtl:'off'};</script><script>${runtime}</script><script src="/dev/vs/loader.js"></script><script>
+  const html = `<!doctype html><meta charset="utf-8"><style>${workbenchCss}</style><style>body{margin:0}#input,#file{width:100%;height:180px}.monaco-workbench,#file{width:900px}</style>
+    <div class="monaco-workbench windows agent-sessions-workbench">${surface.open}<div id="input"></div>${surface.close}</div><div id="file"></div>
+    <script>window.__cursorRtlConfig={editorRtl:'auto'};</script><script>${runtime}</script><script src="/dev/vs/loader.js"></script><script>
     require.config({paths:{vs:'/dev/vs'}});
-    require(['vs/editor/editor.main'],function(monaco){
+    require(['vs/editor/editor.main'],async function(monaco){
       try {
         const sample='سلام Copilot، می‌توانی این function را اصلاح کنی؟';
-        const model=monaco.editor.createModel(sample+'\\nEnglish input', 'plaintext',monaco.Uri.parse('chatSessionInput:rtl-test'));
+        const model=monaco.editor.createModel(sample+'\\nEnglish input', 'plaintext',monaco.Uri.parse('${surface.scheme}:rtl-test'));
         const options={model,wordWrap:'off',minimap:{enabled:false},fontSize:16,lineNumbers:'off',glyphMargin:false,scrollBeyondLastLine:false,automaticLayout:false};
         const editor=monaco.editor.create(document.getElementById('input'),options);
         const fileModel=monaco.editor.createModel(sample,'plaintext',monaco.Uri.parse('file:///ordinary.txt'));
@@ -48,6 +53,13 @@ test("real Monaco keeps Persian input, native caret arrows and mouse mapping in 
         editor.render(true); result.afterTypeDir=document.querySelector('#input .view-line').getAttribute('dir');
         result.value=model.getValue();
         result.purePersian=[];
+        result.editorModes=[];
+        for(const mode of ['auto','always','off']) {
+          window.__cursorRtlSetEditorMode(mode);
+          await new Promise(resolve=>setTimeout(resolve,150));
+          const node=document.querySelector('#input .monaco-editor');
+          result.editorModes.push({mode,marked:node.hasAttribute('data-cursor-rtl-dir'),bidi:getComputedStyle(node).unicodeBidi});
+        }
         for(const fontFamily of ['Consolas, monospace','"Segoe UI", sans-serif','Vazirmatn, sans-serif']) {
           editor.updateOptions({fontFamily});
           for(const text of ['سلام','این یک جمله کاملاً فارسی است','فقط فارسی با علائم، نقطه و پرسش؟']) {
@@ -71,8 +83,9 @@ test("real Monaco keeps Persian input, native caret arrows and mouse mapping in 
     } catch { res.writeHead(404).end(); }
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const profile=fs.mkdtempSync(path.join(os.tmpdir(), "rtl-native-browser-"));
   try {
-    const child = spawn(process.env.CHROMIUM_PATH, ["--headless", "--no-sandbox", "--disable-gpu", "--window-size=1280,900", "--dump-dom", "--virtual-time-budget=6000", `http://127.0.0.1:${server.address().port}/`], { windowsHide: true });
+    const child = spawn(process.env.CHROMIUM_PATH, ["--headless", "--no-sandbox", "--disable-gpu", "--no-first-run", "--user-data-dir="+profile, "--window-size=1280,900", "--dump-dom", "--virtual-time-budget=6000", `http://127.0.0.1:${server.address().port}/`], { windowsHide: true });
     let output = "", errors = "";
     child.stdout.on("data", (data) => { output += data; }); child.stderr.on("data", (data) => { errors += data; });
     const timeout = setTimeout(() => child.kill(), 30000);
@@ -91,10 +104,21 @@ test("real Monaco keeps Persian input, native caret arrows and mouse mapping in 
     assert.ok(result.replaced.startsWith("درود Copilot"), "Selection replacement preserves logical text order");
     assert.equal(result.afterTypeDir, "rtl");
     assert.ok(result.value.includes("English appended\\nEnglish input".replace('\\n','\n')));
+    for(const mode of result.editorModes) {
+      assert.equal(mode.marked,false, 'Chat prompts stay outside file-editor RTL mode: '+JSON.stringify(mode));
+      assert.notEqual(mode.bidi,'plaintext', 'Global code CSS must not override prompt bidi: '+JSON.stringify(mode));
+    }
     for(const pure of result.purePersian) {
       assert.equal(pure.value,pure.text);
       assert.equal(pure.rendered.replace(/\u00a0/g,' '),pure.text);
       assert.ok(pure.width>5 && pure.left>=0 && pure.right<=pure.viewportWidth+1, 'Pure Persian must remain visible: '+JSON.stringify(pure));
     }
-  } finally { await new Promise((resolve) => server.close(resolve)); }
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    assert.equal(path.dirname(path.resolve(profile)),path.resolve(os.tmpdir()));
+    assert.ok(path.basename(profile).startsWith("rtl-native-browser-"));
+    fs.rmSync(profile,{recursive:true,force:true,maxRetries:5});
+  }
 });
+
+}

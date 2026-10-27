@@ -250,7 +250,7 @@
         pre,
         .markdown-code-outer-container,
         .cursor-code-block-content,
-        .monaco-editor:where(:not(.interactive-input-editor .monaco-editor)) {
+        .monaco-editor:where(:not(.interactive-input-editor .monaco-editor, .sessions-chat-editor .monaco-editor)) {
             direction: ltr !important;
             text-align: left !important;
             unicode-bidi: plaintext !important;
@@ -1086,7 +1086,7 @@
         if (el.closest('.xterm, .chat-codeblock, .monaco-diff-editor')) return true;
         // Monaco owns input layout, cursor geometry and composition. Mutating
         // its rendered prompt lines makes typing jump as it redraws those lines.
-        if (el.closest('.interactive-input-editor')) return true;
+        if (el.closest('.interactive-input-editor, .sessions-chat-editor')) return true;
         if (el.closest('.monaco-editor') && !el.closest(PLAN_CONTEXT)) return true;
         if (el.closest('.node-mermaid')) return true;
         var tiptap = el.closest('.tiptap.ProseMirror');
@@ -1681,6 +1681,7 @@
     //   'off'    – never touch the code editor
     var EDITOR_EXCLUDE_SELECTOR = [
         '.interactive-input-editor',
+        '.sessions-chat-editor',
         '.composer-rendered-message',
         '.markdown-root',
         '.markdown-section',

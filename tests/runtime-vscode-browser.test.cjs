@@ -41,6 +41,7 @@ test("VS Code messages stay bidirectional while Monaco owns prompt typing and la
       </div><span id="title" class="session-title">عنوان نشست فارسی</span>
       <div class="monaco-editor"><div id="editor" class="view-line">کد فارسی</div></div>
       <div class="rendered-markdown"><p id="unrelated">بیرون از چت</p></div></div>
+      <div class="new-chat-input-container"><div class="sessions-chat-editor"><div class="monaco-editor"><div class="view-lines"><div id="newPrompt" class="view-line"><span id="newPromptText">سلام دنیا</span></div></div></div></div></div>
       <div class="ui-prompt-input"><div id="cursorPrompt" class="tiptap ProseMirror" contenteditable="true"><p id="cursorPromptLine">پیام فارسی در Cursor</p></div></div>
       <div class="aislash-editor-input"><p id="cursorComposer">متن فارسی کامپوزر</p></div>
       <div class="markdown-root"><p id="cursorAnswer">پاسخ فارسی Cursor</p><p id="cursorEnglish">English Cursor response</p><pre id="cursorCode"><code>const x = 'فارسی';</code></pre></div>
@@ -49,8 +50,7 @@ test("VS Code messages stay bidirectional while Monaco owns prompt typing and la
       window.promptMutations=[];
       window.streamMutations=[];
       for (const id of ['streamRtl','streamLtr']) new MutationObserver(records => window.streamMutations.push(...records.map(m => m.attributeName))).observe(document.getElementById(id),{attributes:true,attributeFilter:['dir','style','data-cursor-rtl-vscode']});
-      const promptRoot=document.querySelector('.interactive-input-editor');
-      new MutationObserver(records => window.promptMutations.push(...records.map(m => ({attribute:m.attributeName,id:m.target.id})))).observe(promptRoot,{attributes:true,subtree:true,attributeFilter:['dir','style','data-cursor-rtl-vscode','data-cursor-rtl-dir']});
+      for (const promptRoot of document.querySelectorAll('.interactive-input-editor, .sessions-chat-editor')) new MutationObserver(records => window.promptMutations.push(...records.map(m => ({attribute:m.attributeName,id:m.target.id})))).observe(promptRoot,{attributes:true,subtree:true,attributeFilter:['dir','style','data-cursor-rtl-vscode','data-cursor-rtl-dir']});
       const caret=document.createRange(); caret.setStart(document.getElementById('promptText').firstChild,2); caret.collapse(true); getSelection().addRange(caret);
       </script>
       <script>${runtime}</script>
@@ -67,7 +67,11 @@ test("VS Code messages stay bidirectional while Monaco owns prompt typing and la
         window.__cursorRtlSetEditorMode('always');
         const promptEditorMarked=document.querySelector('.interactive-input-editor .monaco-editor').hasAttribute('data-cursor-rtl-dir');
         const fileEditorAlignmentDuringAlways=getComputedStyle(document.getElementById('editor')).textAlign;
+        window.newPromptMarked=document.querySelector('.sessions-chat-editor .monaco-editor').hasAttribute('data-cursor-rtl-dir');
         window.__cursorRtlSetEditorMode('off');
+        for(const text of ['English prompt','فارسی با English در حال تایپ']) document.getElementById('newPromptText').firstChild.data=text;
+        const redrawn=document.createElement('div');redrawn.className='view-line';redrawn.id='redrawnNewPrompt';redrawn.textContent='خط فارسی جدید';document.getElementById('newPrompt').after(redrawn);
+        const newInput=document.querySelector('.new-chat-input-container');newInput.classList.add('new-chat-in-session');document.querySelector('.interactive-session').append(newInput);
         document.getElementById('promptText').firstChild.data = 'English prompt';
         document.getElementById('promptText').dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));
         document.getElementById('promptText').firstChild.data = 'فارسی با English در حال تایپ';
@@ -79,7 +83,7 @@ test("VS Code messages stay bidirectional while Monaco owns prompt typing and la
         const input=document.getElementById('freeform'); input.value='پاسخ فارسی'; input.dispatchEvent(new Event('input',{bubbles:true}));
         setTimeout(() => {
           const result = document.createElement('pre'); result.id='results';
-          result.textContent=encodeURIComponent(JSON.stringify({initial,initialSelection,promptEditorMarked,fileEditorAlignmentDuringAlways,promptMutations:window.promptMutations,streamMutations:window.streamMutations,beforeScan,beforeStream,afterStream:{rtl:anchorPosition('rtlAnchor'),ltr:anchorPosition('ltrAnchor')},redrawnPrompt:snapshot('redrawnPrompt'),changed:snapshot('english'),prompt:snapshot('prompt'),streamedAtInsert,streamed:snapshot('streamed'),freeform:snapshot('freeform')}));
+          result.textContent=encodeURIComponent(JSON.stringify({initial,initialSelection,promptEditorMarked,newPromptMarked:window.newPromptMarked,newPrompt:snapshot('newPrompt'),redrawnNewPrompt:snapshot('redrawnNewPrompt'),fileEditorAlignmentDuringAlways,promptMutations:window.promptMutations,streamMutations:window.streamMutations,beforeScan,beforeStream,afterStream:{rtl:anchorPosition('rtlAnchor'),ltr:anchorPosition('ltrAnchor')},redrawnPrompt:snapshot('redrawnPrompt'),changed:snapshot('english'),prompt:snapshot('prompt'),streamedAtInsert,streamed:snapshot('streamed'),freeform:snapshot('freeform')}));
           document.body.append(result);
         }, 400);
       }, 400);
@@ -120,6 +124,9 @@ test("VS Code messages stay bidirectional while Monaco owns prompt typing and la
     assert.equal(data.redrawnPrompt.dir, null, "Monaco redraws are not patched");
     assert.equal(data.promptEditorMarked, false, "Editor RTL mode never flips the chat prompt");
     assert.equal(data.fileEditorAlignmentDuringAlways, "right", "The prompt CSS exclusion preserves optional file-editor RTL alignment");
+    assert.equal(data.newPromptMarked,false,"New-session prompts stay outside file editor RTL mode");
+    assert.equal(data.newPrompt.dir,null);
+    assert.equal(data.redrawnNewPrompt.dir,null);
     assert.deepEqual(data.promptMutations, [], "No direction or style writes inside the prompt, including during composition");
     assert.deepEqual(data.initialSelection, {node:"promptText",offset:2}, "The initial RTL scan preserves the selection");
     assert.equal(data.freeform.dir, "auto", "Native textareas follow input without DOM mutations");

@@ -29,7 +29,7 @@
 
 ### نصب آفلاین از طریق فایل VSIX:
 
-1. فایل `releases/rtl-cursor-1.0.16.vsix` را دانلود کنید (یا از [Releases گیت‌هاب](https://github.com/Fusoft-External/rtl-cursor/releases)).
+1. فایل `releases/rtl-cursor-1.0.17.vsix` را دانلود کنید (یا از [Releases گیت‌هاب](https://github.com/Fusoft-External/rtl-cursor/releases)).
 2. در ادیتور (VS Code، Cursor یا Antigravity IDE) کلیدهای **`Ctrl + Shift + P`** را فشار دهید.
 3. دستور **`Extensions: Install from VSIX...`** را جستجو و فایل VSIX را انتخاب کنید.
 4. روی دکمهٔ نوار وضعیت پایین صفحه کلیک کرده یا دستور **`RTL Cursor: Enable`** را اجرا نمایید.
@@ -84,6 +84,14 @@ powershell.exe -NoProfile -File .\update-agent-watcher.ps1
 - **بررسی لاگ‌ها:** گزارش لودر در `%USERPROFILE%\rtl-cursor.log` و گزارش مراقب پس‌زمینه در `%USERPROFILE%\rtl-cursor-watch.log` ذخیره می‌شود.
 
 ---
+
+## تغییرات نسخه ۱.۰.۱۷
+
+- رفع نامرئی‌شدن متن فارسی در کادر نوشتن چت جدیدِ Agents، پیش از ارسال اولین پیام؛ کادر شروع نشست هم از قوانین عمومی جهت کد و حالت RTL ویرایشگر خارج شده است.
+- پوشش هر دو ساختار ورودی چت با Monaco واقعی و CSS نصب‌شدهٔ Agents؛ بررسی فارسی و متن ترکیبی، سه فونت، مکان‌نما، کلیدهای جهت، کلیک و جایگزینی انتخاب.
+- بررسی تغییر متن، بازترسیم و انتقال کادر به گفت‌وگو بدون دست‌کاری جهت یا سبک خطوط ورودی توسط افزونه.
+
+پس از نصب این نسخه، همهٔ پنجره‌های VS Code، از جمله Agents، را کامل ببندید و دوباره باز کنید.
 
 ## تغییرات نسخه ۱.۰.۱۶
 
