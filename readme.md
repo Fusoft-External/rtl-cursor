@@ -81,6 +81,27 @@ git push origin v1.0.18
 
 ---
 
+### انتشار اختصاصی در Open VSX
+
+گردش‌کار جداگانهٔ [Publish to Open VSX](https://github.com/Fusoft-External/rtl-cursor/actions/workflows/publish-openvsx.yml) با **Run workflow** اجرا می‌شود. گزینهٔ `publish` پیش‌فرض روشن است: همان تست‌ها و بیلد مشترک اجرا می‌شوند، سپس VSIX بررسی‌شده با Trusted Publishing منتشر می‌شود و فایل دریافت‌شده از رجیستری با خروجی بیلد تطبیق داده می‌شود. برای آزمون ساخت بدون انتشار، گزینهٔ `publish` را خاموش کنید.
+
+یک‌بار در [Trusted Publishers](https://open-vsx.org/user-settings/trusted-publishers)، ارائه‌دهندهٔ GitHub Actions را برای افزونهٔ `fusoft.rtl-cursor` با این مشخصات ثبت کنید:
+
+| تنظیم | مقدار |
+| --- | --- |
+| Namespace | `fusoft` |
+| Extension | `rtl-cursor` |
+| Organization or User name | `Fusoft-External` |
+| Repository name | `rtl-cursor` |
+| Workflow filename | `publish-openvsx.yml` |
+| Environment name | `openvsx` |
+
+ثبت این ارتباط به مالکیت Namespace و امضای Publisher Agreement نیاز دارد. افزونه باید دست‌کم یک نسخهٔ فعال داشته باشد. گردش‌کار از محیط گیت‌هاب `openvsx` و مجوز `id-token: write` استفاده می‌کند؛ نیازی به Secret یا `OVSX_PAT` نیست. نام ناشر در `package.json` باید دقیقاً با حروف نام Namespace یکسان باشد. جزئیات در [راهنمای رسمی Trusted Publishing](https://github.com/eclipse-openvsx/openvsx/wiki/Trusted-Publishing) آمده است.
+
+نسخهٔ موجود دوباره منتشر نمی‌شود؛ شمارهٔ بسته و لودر و یادداشت‌های انتشار را پیش از انتشار بعدی به نسخه‌ای تازه تغییر دهید. در Open VSX حتی حذف یک نسخه هم شمارهٔ آن را آزاد نمی‌کند.
+
+---
+
 ## دستورات افزونه در Command Palette
 
 | دستور | عملکرد |

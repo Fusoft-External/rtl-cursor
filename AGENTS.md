@@ -39,9 +39,18 @@ push the versioned source commit to `main`, then push `v<version>` on that exact
 commit. Actions runs all checks, builds and inspects the VSIX from the tagged
 source, and publishes the three required assets with notes from `readme.md`.
 The local VSIX build/commit steps above apply to manual packaging; the CI-built
-VSIX is authoritative for automated releases. Main/PR/manual runs only upload
+VSIX is authoritative for automated releases. Its main/PR/manual runs only upload
 build artifacts and do not publish or replace an existing release. CI-only
 changes do not require changing the extension version or moving its current tag.
+
+For an explicit Open VSX build/publish request, use the separate manual workflow
+`.github/workflows/publish-openvsx.yml` with `publish=true`. Use `publish=false`
+only for a build-only validation. It shares `.github/workflows/build-vsix.yml`
+with GitHub releases, then publishes that exact VSIX using OIDC in the `openvsx`
+environment. The Trusted Publisher registration must name `Fusoft-External`,
+`rtl-cursor`, `publish-openvsx.yml`, and environment `openvsx`, for extension
+`fusoft.rtl-cursor`. Do not add or request a long-lived Open VSX token. Never
+delete an Open VSX version to reuse its number: deleted numbers stay reserved.
 
 ## Repository notes
 

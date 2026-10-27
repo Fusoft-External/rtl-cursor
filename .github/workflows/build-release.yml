@@ -17,69 +17,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: windows-latest
-    timeout-minutes: 25
-    defaults:
-      run:
-        shell: pwsh
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version: '24'
-          package-manager-cache: false
-      - name: Validate version and release tag
-        id: version
-        run: |
-          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Expected a stable extension version' }
-          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
-            throw "Tag $env:GITHUB_REF_NAME does not match package version $version"
-          }
-          $loader = Get-Content resources/rtl-cursor-loader.cjs -Raw
-          if ($loader -notmatch ('LOADER_VERSION = "' + [regex]::Escape($version) + '"')) {
-            throw 'Loader and package versions must match'
-          }
-          if (-not (Get-Content readme.md -Raw).Contains("releases/rtl-cursor-$version.vsix")) {
-            throw 'Readme installation filename must match the package version'
-          }
-          "version=$version" >> $env:GITHUB_OUTPUT
-      - name: Install locked build and browser tools
-        run: npm ci --prefix .github/ci --no-audit --no-fund
-      - name: JavaScript regression checks
-        run: npm test
-      - name: Windows watcher checks
-        run: npm run test:watcher
-      - name: Windows migration checks
-        run: npm run test:migration
-      - name: Install headless Chromium
-        run: |
-          $env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $env:RUNNER_TEMP 'rtl-browsers'
-          "PLAYWRIGHT_BROWSERS_PATH=$env:PLAYWRIGHT_BROWSERS_PATH" >> $env:GITHUB_ENV
-          node .github/ci/node_modules/playwright/cli.js install chromium --only-shell
-      - name: Prepare official Monaco and VS Code CSS
-        run: ./.github/scripts/prepare-browser.ps1
-      - name: Real browser and native Monaco checks
-        run: npm run test:browser
-      - name: Build VSIX from this checkout
-        env:
-          RELEASE_VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          $package = Join-Path $env:RUNNER_TEMP "rtl-cursor-$env:RELEASE_VERSION.vsix"
-          node .github/ci/node_modules/@vscode/vsce/vsce package --no-dependencies --allow-missing-repository --allow-star-activation --out $package
-          if ($LASTEXITCODE -ne 0) { throw 'VSIX packaging failed' }
-          ./.github/scripts/prepare-assets.ps1 -PackagePath $package -OutputDirectory (Join-Path $env:RUNNER_TEMP 'release-assets')
-      - name: Upload installer, helper, checksums and notes
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        with:
-          name: rtl-cursor-${{ steps.version.outputs.version }}
-          path: ${{ runner.temp }}/release-assets/
-          if-no-files-found: error
-          retention-days: 14
+    uses: ./.github/workflows/build-vsix.yml
 
   release:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
