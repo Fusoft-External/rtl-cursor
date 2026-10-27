@@ -65,6 +65,11 @@ and report exactly which remaining step needs attention.
   `.interactive-input-editor`. Exclude both from global code bidi CSS, DOM
   scanning and file-editor RTL modes. Test both real Monaco wrappers with the
   installed Agents CSS, including the revealed welcome composer and redraws.
+- Resolve runtime assets from the editor's `extensions.json` installation
+  registry, skipping `.obsolete` versions. A higher numbered leftover directory
+  can survive a downgrade until after the main-process loader has already run;
+  `--list-extensions` alone does not prove which runtime a window received.
+  Check the loader log's selected path and script length after a full restart.
 - VS Code streaming prose must use native per-paragraph bidi (`unicode-bidi:
   plaintext` with `text-align: start`) in CSS scoped to native chat. Do not
   repeatedly classify these paragraphs by language majority or write `dir` while

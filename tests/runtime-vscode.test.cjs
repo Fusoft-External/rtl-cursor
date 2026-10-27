@@ -23,6 +23,10 @@ async function load(url, options = {}) {
   const vscodeDir = path.win32.join(home, ".vscode", "extensions");
   const preferred = options.extensionDir || vscodeDir;
   const resource = path.win32.join(preferred, extension, "resources", "rtl.js");
+  const entries = options.entries || [extension];
+  const resources = entries.map((entry) => path.win32.join(preferred, entry, "resources", "rtl.js"));
+  const registryPath = path.win32.join(preferred, "extensions.json");
+  const obsoletePath = path.win32.join(preferred, ".obsolete");
   const appOut = "C:\\Code\\resources\\app\\out";
   const nativeSource = path.win32.join(path.win32.dirname(resource), "rtl-vscode-native.cjs");
   const nativeCache = path.win32.join(appOut, "rtl-vscode-native.cjs");
@@ -33,12 +37,16 @@ async function load(url, options = {}) {
     existsSync(file) {
       if (file === nativeSource) return options.native === "source";
       if (file === nativeCache) return options.native === "cached";
-      return !options.uninstalled && (dirs.includes(file) || file === resource);
+      if (file === registryPath) return options.registry !== undefined;
+      if (file === obsoletePath) return options.obsolete !== undefined;
+      return !options.uninstalled && (dirs.includes(file) || resources.includes(file));
     },
-    readdirSync() { return [extension]; },
+    readdirSync() { return entries; },
     readFileSync(file) {
       reads.push(file);
-      if (file === resource) return "window.__cursorRtlScanAll = function() {};";
+      if (file === registryPath) return typeof options.registry === "string" ? options.registry : JSON.stringify(options.registry);
+      if (file === obsoletePath) return JSON.stringify(options.obsolete);
+      if (resources.includes(file)) return "window.__cursorRtlScanAll = function() {};";
       if (file === path.win32.join(home, ".rtl-cursor-vscode", "font-settings.json")) return "{}";
       throw new Error("ENOENT: " + file);
     }
@@ -56,6 +64,45 @@ async function load(url, options = {}) {
   for (let i = 0; i < 10; i++) await Promise.resolve();
   return { scripts, reads, wc, app, resource, nativeCalls };
 }
+
+const registeredExtension = { identifier: { id: "fusoft.rtl-cursor" }, version: "1.0.15", relativeLocation: "fusoft.rtl-cursor-1.0.15" };
+const staleExtension = "fusoft.rtl-cursor-1.0.19";
+
+test("the registered VSIX wins over a higher numbered leftover before extension cleanup", async () => {
+  const h = await load("vscode-file://vscode-app/workbench.html", {
+    entries: [registeredExtension.relativeLocation, staleExtension], registry: [registeredExtension], native: "source"
+  });
+  assert.ok(h.reads.includes(h.resource));
+  assert.ok(!h.reads.some((file) => file.includes(staleExtension)));
+  assert.equal(h.nativeCalls.length, 1, "Native input support comes from the same registered installation");
+  assert.equal(h.scripts.length, 2);
+});
+
+test("unregistered leftover directories cannot revive an uninstalled extension", async () => {
+  const h = await load("vscode-file://vscode-app/workbench.html", {
+    entries: [registeredExtension.relativeLocation, staleExtension], registry: [], native: "cached"
+  });
+  assert.equal(h.scripts.length, 0);
+  assert.equal(h.nativeCalls[0].enabled, false);
+});
+
+test("legacy directory discovery skips obsolete versions", async () => {
+  const h = await load("vscode-file://vscode-app/workbench.html", {
+    entries: [registeredExtension.relativeLocation, staleExtension], obsolete: { [staleExtension]: true }
+  });
+  assert.ok(h.reads.includes(h.resource));
+  assert.ok(!h.reads.some((file) => file.includes(staleExtension)));
+});
+
+test("registered obsolete versions and invalid registry locations are never executed", async () => {
+  for (const options of [
+    { registry: [registeredExtension], obsolete: { [registeredExtension.relativeLocation]: true } },
+    { registry: [{ ...registeredExtension, relativeLocation: "../fusoft.rtl-cursor-1.0.15" }] },
+    { registry: "{" }
+  ]) {
+    assert.equal((await load("vscode-file://vscode-app/workbench.html", options)).scripts.length, 0);
+  }
+});
 
 for (const page of ["workbench.html", "workbench-jetski-agent.html", "workbench-dev.html",
   "vs/sessions/electron-browser/sessions.html", "vs/sessions/electron-browser/sessions-dev.html?test=1"]) {
@@ -76,12 +123,15 @@ test("the loader skips unrelated webviews and pages", async () => {
 
 test("custom and portable extension directories override the default VS Code directory", async () => {
   const custom = "D:\\Custom Extensions";
+  const installed = { registry: [registeredExtension], entries: [registeredExtension.relativeLocation, staleExtension] };
   for (const argv of [["--extensions-dir", custom], ["--extensions-dir=" + custom]]) {
-    const h = await load("vscode-file://vscode-app/workbench.html", { extensionDir: custom, argv });
+    const h = await load("vscode-file://vscode-app/workbench.html", { ...installed, extensionDir: custom, argv });
     assert.ok(h.reads.includes(h.resource));
+    assert.ok(!h.reads.some((file) => file.includes(staleExtension)));
   }
   const portable = "D:\\Portable Code\\data";
   const h = await load("vscode-file://vscode-app/workbench.html", {
+    ...installed,
     extensionDir: path.win32.join(portable, "extensions"), env: { VSCODE_PORTABLE: portable }
   });
   assert.ok(h.reads.includes(h.resource));

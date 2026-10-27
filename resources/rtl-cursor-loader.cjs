@@ -6,7 +6,7 @@
     var LOG_PREFIX = "[RTL Cursor Loader]";
     var homeDir = os.homedir();
     var LOG_FILE = path.join(homeDir, "rtl-cursor.log");
-    var LOADER_VERSION = "1.0.17";
+    var LOADER_VERSION = "1.0.20";
     var EXT_DIR_RE = /^(?:peyma|fusoft)\.rtl-cursor-(\d+)\.(\d+)\.(\d+)/;
 
     function log() {
@@ -54,6 +54,40 @@
         return 0;
     }
 
+    function installedExtensionDirs(candidateDir) {
+        var obsolete = {};
+        var obsoletePath = path.join(candidateDir, ".obsolete");
+        if (fs.existsSync(obsoletePath)) {
+            try { obsolete = JSON.parse(fs.readFileSync(obsoletePath, "utf8")) || {}; }
+            catch (error) { log("could not read obsolete extensions:", error.message); }
+        }
+        var registryPath = path.join(candidateDir, "extensions.json");
+        var dirs;
+        if (fs.existsSync(registryPath)) {
+            // Extension directories can survive a downgrade until the extension
+            // host cleans them up. Only registered installations may be loaded;
+            // a higher numbered leftover must never override the active VSIX.
+            try {
+                var registry = JSON.parse(fs.readFileSync(registryPath, "utf8"));
+                if (!Array.isArray(registry)) throw new Error("Invalid extension registry");
+                dirs = registry.filter(function(entry) {
+                    return entry && entry.identifier && /^(?:peyma|fusoft)\.rtl-cursor$/i.test(entry.identifier.id || "");
+                }).map(function(entry) {
+                    return entry.relativeLocation;
+                }).filter(function(dir) {
+                    return typeof dir === "string" && path.basename(dir) === dir && EXT_DIR_RE.test(dir);
+                });
+            } catch (error) {
+                log("could not read installed extension registry:", error.message);
+                return [];
+            }
+        } else {
+            // Older/portable installations may not have a registry yet.
+            dirs = fs.readdirSync(candidateDir).filter(function(dir) { return EXT_DIR_RE.test(dir); });
+        }
+        return dirs.filter(function(dir) { return obsolete[dir] !== true; }).sort(compareExtensionDirs);
+    }
+
     function isVSCodeApp() {
         return /^(?:code(?: - insiders)?|code-insiders)\.exe$/i.test(path.basename(process.execPath || "")) ||
             /^(?:code|visual studio code)(?: - insiders)?$/i.test(electron.app.getName ? electron.app.getName() : "");
@@ -91,12 +125,9 @@
             var candidateDir = searchDirs[s];
             if (!fs.existsSync(candidateDir)) continue;
             try {
-                var entries = fs.readdirSync(candidateDir);
-                var dirs = entries
-                    .filter(function(d) { return EXT_DIR_RE.test(d); })
-                    .sort(compareExtensionDirs);
-                if (dirs.length > 0) {
-                    var rtlPath = path.join(candidateDir, dirs[dirs.length - 1], "resources", "rtl.js");
+                var dirs = installedExtensionDirs(candidateDir);
+                for (var d = dirs.length - 1; d >= 0; d--) {
+                    var rtlPath = path.join(candidateDir, dirs[d], "resources", "rtl.js");
                     if (fs.existsSync(rtlPath)) {
                         log("rtl.js found at:", rtlPath);
                         return rtlPath;

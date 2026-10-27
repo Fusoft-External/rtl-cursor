@@ -34,7 +34,7 @@ test(`real Monaco keeps Persian visible with native editing in ${surface.name}`,
       try {
         const sample='سلام Copilot، می‌توانی این function را اصلاح کنی؟';
         const model=monaco.editor.createModel(sample+'\\nEnglish input', 'plaintext',monaco.Uri.parse('${surface.scheme}:rtl-test'));
-        const options={model,wordWrap:'off',minimap:{enabled:false},fontSize:16,lineNumbers:'off',glyphMargin:false,scrollBeyondLastLine:false,automaticLayout:false};
+        const options={model,wordWrap:'on',wrappingStrategy:'advanced',minimap:{enabled:false},fontFamily:'system-ui, -apple-system, sans-serif',fontSize:13,lineHeight:20,lineNumbers:'off',lineDecorationsWidth:0,glyphMargin:false,scrollBeyondLastLine:false,automaticLayout:false,padding:{top:8,bottom:2},scrollbar:{horizontal:'hidden',vertical:'auto',verticalScrollbarSize:7},revealHorizontalRightPadding:5};
         const editor=monaco.editor.create(document.getElementById('input'),options);
         const fileModel=monaco.editor.createModel(sample,'plaintext',monaco.Uri.parse('file:///ordinary.txt'));
         const fileEditor=monaco.editor.create(document.getElementById('file'),{...options,model:fileModel});
