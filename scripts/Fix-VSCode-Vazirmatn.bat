@@ -63,6 +63,93 @@ function Get-SafePath([string]$Root, [string]$Relative) {
     return $full
 }
 
+function Get-JsoncTokens([string]$Text) {
+    $pattern = '"(?:[^"\\\x00-\x1f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"|//[^\r\n]*|/\*[\s\S]*?\*/|\s+|[{}\[\]:,]|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?|true|false|null'
+    $position = 0
+    $tokens = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($token in [regex]::Matches($Text, $pattern)) {
+        if ($token.Index -ne $position) { throw 'Invalid user settings JSON. No files were changed.' }
+        $position = $token.Index + $token.Length
+        if ($token.Value -match '^\s|^//|^/\*') { continue }
+        $tokens.Add($token)
+    }
+    if ($position -ne $Text.Length -or $tokens.Count -lt 2 -or $tokens[0].Value -ne '{' -or $tokens[$tokens.Count-1].Value -ne '}') {
+        throw 'User settings must contain one JSON object. No files were changed.'
+    }
+    $normalized = New-Object Text.StringBuilder
+    for ($i = 0; $i -lt $tokens.Count; $i++) {
+        if ($tokens[$i].Value -eq ',' -and $i+1 -lt $tokens.Count -and $tokens[$i+1].Value -in @('}', ']')) { continue }
+        $null = $normalized.Append($tokens[$i].Value)
+    }
+    $null = $normalized.ToString() | ConvertFrom-Json
+    return ,$tokens
+}
+
+function Set-FontSettingsText([string]$Text) {
+    $prefix = ''
+    if ($Text.Length -gt 0 -and $Text[0] -eq [char]0xFEFF) { $prefix = [string][char]0xFEFF; $Text = $Text.Substring(1) }
+    $tokens = Get-JsoncTokens $Text
+    $desired = [ordered]@{
+        'editor.fontFamily' = "'Vazirmatn', Consolas, 'Courier New', monospace"
+        'chat.fontFamily' = 'Vazirmatn'
+        'chat.editor.fontFamily' = "'Vazirmatn', Consolas, 'Courier New', monospace"
+    }
+    $found = @{}
+    $edits = New-Object 'System.Collections.Generic.List[object]'
+    $depth = 0
+    for ($i = 0; $i -lt $tokens.Count; $i++) {
+        $token = $tokens[$i]
+        if ($token.Value -in @('{', '[')) { $depth++; continue }
+        if ($token.Value -in @('}', ']')) { $depth--; continue }
+        if ($depth -ne 1 -or -not $token.Value.StartsWith('"') -or $i+2 -ge $tokens.Count -or $tokens[$i+1].Value -ne ':') { continue }
+        $key = $token.Value | ConvertFrom-Json
+        if (-not $desired.Contains($key)) { continue }
+        if ($found.ContainsKey($key)) { throw ('Duplicate font setting: ' + $key) }
+        $found[$key] = $true
+        $valueStart = $i+2
+        $valueEnd = $valueStart
+        if ($tokens[$valueStart].Value -in @('{', '[')) {
+            $valueDepth = 0
+            for ($j = $valueStart; $j -lt $tokens.Count; $j++) {
+                if ($tokens[$j].Value -in @('{', '[')) { $valueDepth++ }
+                if ($tokens[$j].Value -in @('}', ']')) { $valueDepth-- }
+                if ($valueDepth -eq 0) { $valueEnd = $j; break }
+            }
+        }
+        $start = $tokens[$valueStart].Index
+        $length = $tokens[$valueEnd].Index + $tokens[$valueEnd].Length - $start
+        $currentValue = $Text.Substring($start, $length)
+        if ($tokens[$valueStart].Value.StartsWith('"') -and ($currentValue | ConvertFrom-Json) -eq $desired[$key]) { continue }
+        $replacement = ConvertTo-Json -InputObject $desired[$key] -Compress
+        $edits.Add([pscustomobject]@{ start=$start; length=$length; text=$replacement })
+    }
+    $missing = @($desired.Keys | Where-Object { -not $found.ContainsKey($_) })
+    if ($missing.Count -gt 0) {
+        $newline = "`n"
+        if ($Text.Contains("`r`n")) { $newline = "`r`n" }
+        $previous = $tokens[$tokens.Count-2]
+        $leadingComma = ''
+        if ($previous.Value -notin @('{', ',')) {
+            if ($previous.Index+$previous.Length -eq $tokens[$tokens.Count-1].Index) { $leadingComma = ',' }
+            else { $edits.Add([pscustomobject]@{ start=($previous.Index+$previous.Length); length=0; text=',' }) }
+        }
+        $lines = @($missing | ForEach-Object {
+            '    ' + (ConvertTo-Json -InputObject $_ -Compress) + ': ' + (ConvertTo-Json -InputObject $desired[$_] -Compress)
+        })
+        $edits.Add([pscustomobject]@{ start=$tokens[$tokens.Count-1].Index; length=0; text=($leadingComma+$newline+($lines -join (','+$newline))+$newline) })
+    }
+    foreach ($edit in @($edits | Sort-Object start, length -Descending)) {
+        $Text = $Text.Substring(0, $edit.start) + $edit.text + $Text.Substring($edit.start+$edit.length)
+    }
+    $null = Get-JsoncTokens $Text
+    return $prefix + $Text
+}
+
+function Get-ChangeTarget($Change) {
+    if ($Change.scope -eq 'settings') { return $settingsPath }
+    return Get-SafePath $AppRoot $Change.relative_path
+}
+
 try {
     if (-not $AppRoot) { $AppRoot = Find-AppRoot }
     $AppRoot = [IO.Path]::GetFullPath($AppRoot)
@@ -71,31 +158,39 @@ try {
     $productText = $utf8.GetString($productBytes)
     $product = $productText | ConvertFrom-Json
     $backupBase = Join-Path $env:APPDATA 'Code/User/font-backups'
+    $settingsPath = Join-Path $env:APPDATA 'Code/User/settings.json'
     Write-Host ('VS Code: ' + $AppRoot)
     Write-Host ('Mode: ' + $Mode)
     $changes = New-Object 'System.Collections.Generic.List[object]'
 
     if ($Mode -eq 'restore') {
-        $selected = $null
+        $restoreEntries = @{}
         foreach ($folder in @(Get-ChildItem -LiteralPath $backupBase -Directory -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)) {
             $manifestPath = Join-Path $folder.FullName 'manifest.json'
             if (-not (Test-Path -LiteralPath $manifestPath)) { continue }
             $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json
             if ([string]::Equals($manifest.install_root, $AppRoot, [StringComparison]::OrdinalIgnoreCase)) {
-                $selected = $folder.FullName
-                break
+                foreach ($entry in $manifest.files) {
+                    if ($entry.scope -eq 'settings' -and -not [string]::Equals($manifest.settings_path, $settingsPath, [StringComparison]::OrdinalIgnoreCase)) { continue }
+                    $entryKey = [string]$entry.scope + ':' + $entry.relative_path
+                    if (-not $entry.scope) { $entryKey = 'app:' + $entry.relative_path }
+                    if (-not $restoreEntries.ContainsKey($entryKey)) {
+                        $restoreEntries[$entryKey] = [pscustomobject]@{ entry=$entry; folder=$folder.FullName }
+                    }
+                }
             }
         }
-        if (-not $selected) { throw 'No backup was found for this exact VS Code installation.' }
-        foreach ($entry in $manifest.files) {
-            $target = Get-SafePath $AppRoot $entry.relative_path
-            $backupFile = Get-SafePath $selected $entry.relative_path
+        if ($restoreEntries.Count -eq 0) { throw 'No backup was found for this exact VS Code installation.' }
+        foreach ($record in $restoreEntries.Values) {
+            $entry = $record.entry
+            $target = Get-ChangeTarget $entry
+            $backupFile = Get-SafePath $record.folder $entry.relative_path
             $current = [IO.File]::ReadAllBytes($target)
             $original = [IO.File]::ReadAllBytes($backupFile)
             if ((Get-HashHex $original) -ne $entry.original_sha256) { throw ('Damaged backup: ' + $entry.relative_path) }
             if ((Get-HashHex $current) -eq $entry.original_sha256) { continue }
             if ((Get-HashHex $current) -ne $entry.modified_sha256) { throw ('File changed since the patch; refusing to overwrite: ' + $entry.relative_path) }
-            $changes.Add([pscustomobject]@{ relative_path=$entry.relative_path; original=$current; changed=$original })
+            $changes.Add([pscustomobject]@{ relative_path=$entry.relative_path; scope=$entry.scope; original=$current; changed=$original; existed=$true })
         }
     } else {
         $fontFound = $false
@@ -148,17 +243,27 @@ try {
             $null = $productText | ConvertFrom-Json
             $changes.Add([pscustomobject]@{ relative_path='product.json'; original=$productBytes; changed=$utf8.GetBytes($productText) })
         }
+        $settingsExisted = Test-Path -LiteralPath $settingsPath
+        if ($settingsExisted) { $settingsOriginal = [IO.File]::ReadAllBytes($settingsPath) }
+        else { $settingsOriginal = $utf8.GetBytes('{}') }
+        $settingsText = $utf8.GetString($settingsOriginal)
+        $settingsUpdated = Set-FontSettingsText $settingsText
+        if ($settingsText -cne $settingsUpdated) {
+            $changes.Add([pscustomobject]@{ relative_path='settings/user-settings.json'; scope='settings'; original=$settingsOriginal; changed=$utf8.GetBytes($settingsUpdated); existed=$settingsExisted })
+        }
     }
 
     if ($changes.Count -eq 0) {
         if ($Mode -eq 'restore') { Write-Host 'Original files are already restored.' -ForegroundColor Green }
-        else { Write-Host 'Vazirmatn is already applied to the input box and sidebar.' -ForegroundColor Green }
+        else { Write-Host 'Vazirmatn is already applied to the UI, input box, chat, editor and chat code blocks.' -ForegroundColor Green }
         exit 0
     }
     foreach ($change in $changes) { Write-Host ('  ' + $change.relative_path) }
     if ($Mode -eq 'check') { Write-Host 'Patch is supported. Check completed without changing files.'; exit 0 }
     foreach ($change in $changes) {
-        $stream = [IO.File]::Open((Join-Path $AppRoot $change.relative_path), 'Open', 'ReadWrite', 'ReadWrite')
+        $target = Get-ChangeTarget $change
+        if ($change.scope -eq 'settings' -and -not $change.existed) { continue }
+        $stream = [IO.File]::Open($target, 'Open', 'ReadWrite', 'ReadWrite')
         $stream.Dispose()
     }
 
@@ -172,9 +277,11 @@ try {
             $null = New-Item -ItemType Directory -Path (Split-Path $destination -Parent) -Force
             [IO.File]::WriteAllBytes($destination, $change.original)
             if ((Get-HashHex ([IO.File]::ReadAllBytes($destination))) -ne (Get-HashHex $change.original)) { throw 'Backup verification failed.' }
-            $entries += [ordered]@{ relative_path=$change.relative_path; original_sha256=(Get-HashHex $change.original); modified_sha256=(Get-HashHex $change.changed) }
+            $scope = 'app'
+            if ($change.scope -eq 'settings') { $scope = 'settings' }
+            $entries += [ordered]@{ relative_path=$change.relative_path; scope=$scope; original_sha256=(Get-HashHex $change.original); modified_sha256=(Get-HashHex $change.changed) }
         }
-        $manifestText = [ordered]@{ font='Vazirmatn'; install_root=$AppRoot; files=$entries } | ConvertTo-Json -Depth 5
+        $manifestText = [ordered]@{ font='Vazirmatn'; install_root=$AppRoot; settings_path=$settingsPath; files=$entries } | ConvertTo-Json -Depth 5
         [IO.File]::WriteAllText((Join-Path $backup 'manifest.json'), $manifestText, $utf8)
         Write-Host ('Backup: ' + $backup)
     }
@@ -182,17 +289,24 @@ try {
     $written = New-Object 'System.Collections.Generic.List[object]'
     try {
         foreach ($change in $changes) {
-            $target = Join-Path $AppRoot $change.relative_path
-            if ((Get-HashHex ([IO.File]::ReadAllBytes($target))) -ne (Get-HashHex $change.original)) { throw ('File changed during patch: ' + $change.relative_path) }
+            $target = Get-ChangeTarget $change
+            if ($change.scope -eq 'settings' -and -not $change.existed) {
+                if (Test-Path -LiteralPath $target) { throw 'User settings were created by another process. Run this BAT again.' }
+                $null = New-Item -ItemType Directory -Path (Split-Path $target -Parent) -Force
+            } elseif ((Get-HashHex ([IO.File]::ReadAllBytes($target))) -ne (Get-HashHex $change.original)) { throw ('File changed during patch: ' + $change.relative_path) }
             $written.Add($change)
             [IO.File]::WriteAllBytes($target, $change.changed)
             if ((Get-HashHex ([IO.File]::ReadAllBytes($target))) -ne (Get-HashHex $change.changed)) { throw 'Write verification failed.' }
         }
     } catch {
-        foreach ($change in $written) { [IO.File]::WriteAllBytes((Join-Path $AppRoot $change.relative_path), $change.original) }
+        foreach ($change in $written) {
+            $target = Get-ChangeTarget $change
+            if ($change.scope -eq 'settings' -and -not $change.existed) { [IO.File]::Delete($target) }
+            else { [IO.File]::WriteAllBytes($target, $change.original) }
+        }
         throw
     }
-    Write-Host 'Success. In VS Code run: Developer: Reload Window' -ForegroundColor Green
+    Write-Host 'Success. UI, input, chat and editor font settings updated. In VS Code run: Developer: Reload Window' -ForegroundColor Green
     Write-Host 'Reapply this BAT after a VS Code update. To undo: run this BAT with restore.'
     exit 0
 } catch {
