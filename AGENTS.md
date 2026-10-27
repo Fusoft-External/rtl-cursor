@@ -53,3 +53,8 @@ and report exactly which remaining step needs attention.
   the general editor RTL mode; keep RTL processing on displayed chat content.
   A test asserting that a prompt line becomes RTL is insufficient: assert zero
   extension-owned DOM/style mutations during mixed-language input and redraws.
+- VS Code streaming prose must use native per-paragraph bidi (`unicode-bidi:
+  plaintext` with `text-align: start`) in CSS scoped to native chat. Do not
+  repeatedly classify these paragraphs by language majority or write `dir` while
+  tokens arrive. Test actual text positions before and after mixed-language
+  appends, not just computed styles; preserve Cursor/Antigravity behavior.

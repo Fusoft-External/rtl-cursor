@@ -1058,6 +1058,17 @@
     })).join(', ');
     DIR_SELECTOR += ', ' + VSCODE_TEXT_SELECTOR;
 
+    // Streaming prose must not be reclassified by a delayed majority scan.
+    // Native plaintext resolves each paragraph from its first strong character
+    // before paint; start alignment follows that same paragraph base direction.
+    // Keep these rules in the stylesheet so newly streamed nodes work immediately.
+    var VSCODE_NATIVE_TEXT_SELECTOR = [
+        '.chat-request-text', '.chat-thinking-text', '.chat-thinking-title-detail-text'
+    ].concat(['p', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'th', 'td'].map(function(tag) {
+        return '.interactive-session .rendered-markdown ' + tag;
+    })).join(', ');
+    style.textContent += '\n' + VSCODE_NATIVE_TEXT_SELECTOR + ' { unicode-bidi: plaintext !important; text-align: start !important; }\n';
+
     /* Containers whose children manage their own DOM (mermaid diagrams and most
        TipTap editors). Plan-rendered TipTap content and Agent Window prompt input
        are allowed below because they need per-element direction while editing. */
@@ -1131,6 +1142,11 @@
     var LTR_TEXT = /[A-Za-z]/g;
 
     function isExcludedMutation(mutation) {
+        if (mutation.type === 'characterData' ||
+            (mutation.type === 'childList' && Array.prototype.every.call(mutation.addedNodes, function(node) { return node.nodeType === 3; }))) {
+            var parent = mutation.target && (mutation.target.nodeType === 1 ? mutation.target : mutation.target.parentElement);
+            if (parent && parent.closest(VSCODE_NATIVE_TEXT_SELECTOR)) return true;
+        }
         if (mutation.type === 'childList') {
             for (var i = 0; i < mutation.addedNodes.length; i++) {
                 var added = mutation.addedNodes[i];
@@ -1317,6 +1333,9 @@
            value (no DOM mutation), so a scan-time rtl/ltr decision would go
            stale. dir="auto" lets the browser follow the value natively. */
         if (el.matches && el.matches('.compact-agent-history-search-input, .chat-question-freeform-textarea')) return 'auto';
+        // Prose descendants have no extension-owned dir attributes, allowing
+        // native auto direction on list/table containers to inspect their text.
+        if (el.matches('ol, ul, table') && el.matches(VSCODE_TEXT_SELECTOR)) return 'auto';
         if (el.matches && el.matches('ol, ul')) return getListDir(el);
         if (el.matches && el.matches('table')) return getTableDir(el);
         var optionDir = getQuestionnaireOptionDir(el);
@@ -1341,6 +1360,7 @@
     function applyManagedDir(el) {
         if (isExcludedElement(el)) return false;
         if (isInsidePlanEditorContent(el)) return false;
+        if (el.matches(VSCODE_NATIVE_TEXT_SELECTOR)) return false;
         var desiredDir = getDesiredDir(el);
         var currentDir = el.getAttribute('dir');
         if (el.matches(VSCODE_TEXT_SELECTOR) && !el.hasAttribute('data-cursor-rtl-vscode')) {
