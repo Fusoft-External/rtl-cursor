@@ -94,6 +94,12 @@ function createHarness(options = {}) {
     readdirSync: (directory) => [...files.keys()]
       .filter((file) => windowsPath.dirname(file) === key(directory))
       .map((file) => windowsPath.basename(file)),
+    openSync: options.lockCode ? () => {
+      const error = new Error("locked");
+      error.code = options.lockCode;
+      throw error;
+    } : void 0,
+    closeSync() {},
     watch: (file, callback) => {
       const watcher = { file: key(file), callback, closed: false, close() { this.closed = true; } };
       watchers.push(watcher);
@@ -409,8 +415,19 @@ test("matching watcher content preserves an existing helper and synchronizes aut
   harness.setFile(watchPidPath, "9876");
   await harness.sandbox.installBackgroundWatch(extensionPath);
   assert.deepEqual(harness.execCalls, [], "An unchanged watcher does not need process migration");
+  assert.equal(harness.spawnCalls.some((call) => call.command === "reg"), false, "Registry updates must not open a console");
+  assert.equal(harness.spawnCalls.some((call) => call.command === "wscript.exe"), true, "A stopped watcher is started by the windowless launcher");
   assert.equal(harness.files.get(watchPidPath), "9876");
   assert.deepEqual(JSON.parse(harness.files.get(windowsPath.join(stateDir, "watch-settings.json"))), { autoReapply: false, autoRelaunch: true });
+});
+
+test("a running watcher is not started again", async () => {
+  const harness = createHarness({ lockCode: "EBUSY" });
+  harness.setFile(watchScriptPath, "# bundled watcher\n");
+  harness.setFile(windowsPath.join(stateDir, "watch.lock"), "held");
+  await harness.sandbox.installBackgroundWatch(extensionPath);
+  assert.deepEqual(harness.execCalls, []);
+  assert.deepEqual(harness.spawnCalls, [], "No console or launcher process is created while the watcher holds its lock");
 });
 
 test("configuration changes immediately synchronize autoReapply with the background watcher", async () => {

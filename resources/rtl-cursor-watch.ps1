@@ -51,7 +51,16 @@ try {
         New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
     }
     $PID | Set-Content -LiteralPath $pidFile -Encoding ASCII
-} catch {}
+    # Held until exit so a later Cursor start can see the watcher without
+    # launching another console process.
+    $script:watchLock = [System.IO.File]::Open(
+        (Join-Path $stateDir "watch.lock"),
+        [System.IO.FileMode]::OpenOrCreate,
+        [System.IO.FileAccess]::ReadWrite,
+        [System.IO.FileShare]::None)
+} catch {
+    Write-Log ("watch lock failed: " + $_.Exception.Message)
+}
 
 function Get-ExtensionVersionParts([string]$name) {
     $m = [regex]::Match($name, $EXT_DIR_RE)
@@ -409,4 +418,5 @@ try {
         }
     } catch {}
     try { $mutex.ReleaseMutex(); $mutex.Dispose() } catch {}
+    try { if ($script:watchLock) { $script:watchLock.Dispose() } } catch {}
 }

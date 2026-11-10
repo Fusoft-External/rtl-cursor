@@ -496,6 +496,22 @@ async function stopManagedWatchProcess() {
   await runHiddenPowerShell(`$ErrorActionPreference='Stop'; $pattern='(?i)(?:^|\\s)-File\\s+"?' + [regex]::Escape('${scriptPath}') + '"?(?:\\s|$)'; $watchers=@(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" | Where-Object { $_.Name -eq 'powershell.exe' -and $_.CommandLine -match $pattern }); foreach ($watcher in $watchers) { $current=Get-CimInstance Win32_Process -Filter ('ProcessId=' + $watcher.ProcessId); if (-not $current -or $current.Name -ne 'powershell.exe' -or $current.CommandLine -notmatch $pattern -or $current.CreationDate -ne $watcher.CreationDate) { continue }; $helper=Get-Process -Id $watcher.ProcessId -ErrorAction SilentlyContinue; if ($helper) { Stop-Process -Id $watcher.ProcessId -Force -ErrorAction Stop; if (-not $helper.WaitForExit(5000)) { throw 'RTL watcher did not stop' } } }; $remaining=@(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" | Where-Object { $_.Name -eq 'powershell.exe' -and $_.CommandLine -match $pattern }); if ($remaining.Count -gt 0) { throw 'RTL watcher replacement deferred: old watcher is still running' }`);
   try { fs3.unlinkSync(pidFile); } catch {}
 }
+function watcherLockHeld(scriptPath) {
+  const lockPath = pathUser.join(pathUser.dirname(scriptPath), "watch.lock");
+  if (!fs3.existsSync(lockPath) || typeof fs3.openSync !== "function") return false;
+  let handle;
+  try {
+    handle = fs3.openSync(lockPath, "r");
+    return false;
+  } catch (err) {
+    const code = err && err.code;
+    return code === "EBUSY" || code === "EPERM" || code === "EACCES";
+  } finally {
+    if (handle !== void 0) {
+      try { fs3.closeSync(handle); } catch {}
+    }
+  }
+}
 async function installBackgroundWatch(extensionPath) {
   if (process.platform !== "win32" || isVSCodeHost()) {
     return;
@@ -532,11 +548,16 @@ async function installBackgroundWatchNow(extensionPath) {
     const runCmd = fs3.existsSync(vbs)
       ? `wscript.exe //nologo //B "${vbs.replace(/"/g, '\\"')}"`
       : `powershell.exe -NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "${script.replace(/"/g, '\\"')}"`;
-    child_process.spawn(
-      "reg",
-      ["add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", WATCH_RUN_VALUE, "/t", "REG_SZ", "/d", runCmd, "/f"],
-      { detached: true, stdio: "ignore", windowsHide: true }
-    ).unref();
+    // reg.exe is a console program and flashes a window. The windowless
+    // launcher writes the same Run value itself.
+    if (!fs3.existsSync(vbs)) {
+      child_process.spawn(
+        "reg",
+        ["add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", WATCH_RUN_VALUE, "/t", "REG_SZ", "/d", runCmd, "/f"],
+        { detached: true, stdio: "ignore", windowsHide: true }
+      ).unref();
+    }
+    if (watcherLockHeld(script)) return;
     if (fs3.existsSync(vbs)) {
       child_process.spawn(
         "wscript.exe",
