@@ -18,11 +18,13 @@ git tag v1.0.18
 git push origin v1.0.18
 ```
 
-بعد از موفقیت همهٔ بررسی‌ها، تگ نسخه ریلیز GitHub را به‌صورت خودکار با VSIX، ابزار `update-agent-watcher.ps1` و فایل `SHA256SUMS.txt` منتشر می‌کند. متن ریلیز از بخش تغییرات همان نسخه در `readme.md` گرفته می‌شود. شمارهٔ تگ باید با بسته و لودر یکسان باشد؛ ریلیز موجود جایگزین نمی‌شود. انتشار از توکن داخلی GitHub Actions با دسترسی `contents: write` استفاده می‌کند و به توکن شخصی نیاز ندارد. این گردش‌کار در Marketplace انتشار انجام نمی‌دهد.
+بعد از موفقیت همهٔ بررسی‌ها، تگ نسخه ریلیز GitHub را به‌صورت خودکار با VSIX، ابزار `update-agent-watcher.ps1` و فایل `SHA256SUMS.txt` منتشر می‌کند. متن ریلیز از بخش تغییرات همان نسخه در `readme.md` گرفته می‌شود. شمارهٔ تگ باید با بسته و لودر یکسان باشد؛ ریلیز موجود جایگزین نمی‌شود. انتشار از توکن داخلی GitHub Actions با دسترسی `contents: write` استفاده می‌کند و به توکن شخصی نیاز ندارد. این گردش‌کار به‌تنهایی در Open VSX یا Marketplace انتشار انجام نمی‌دهد. Push روی `main`، Pull Request و اجرای دستی این گردش‌کار فقط می‌سازند و ریلیز گیت‌هاب نمی‌سازند.
+
+فرمان `cicd` یعنی آخرین نسخه، با همین شماره، در گیت‌هاب و Open VSX و Visual Studio Marketplace منتشر شود. کرسر از Open VSX و VS Code از مارکت‌پلیس نصب می‌کند. شماره‌ها باید یکی باشند. نسخه‌های قدیمیِ جاافتاده پر نمی‌شوند، مگر اینکه جدا خواسته شود.
 
 ## انتشار اختصاصی در Open VSX
 
-گردش‌کار جداگانهٔ [Publish to Open VSX](https://github.com/Fusoft-External/rtl-cursor/actions/workflows/publish-openvsx.yml) با **Run workflow** اجرا می‌شود. گزینهٔ `publish` پیش‌فرض روشن است: همان تست‌ها و بیلد مشترک اجرا می‌شوند، سپس VSIX بررسی‌شده با Trusted Publishing منتشر می‌شود. نسخهٔ تازه اول چند دقیقه در بازبینی می‌ماند و در فهرست عمومی نیست؛ بررسی انتشار هر ۲۰ ثانیه رجیستری را می‌بیند و به محض عمومی شدن، فایل دریافت‌شده را با خروجی بیلد تطبیق می‌دهد. برای آزمون ساخت بدون انتشار، گزینهٔ `publish` را خاموش کنید.
+گردش‌کار [Publish to Open VSX](https://github.com/Fusoft-External/rtl-cursor/actions/workflows/publish-openvsx.yml) با **Run workflow** اجرا می‌شود. با فرمان `cicd` همین گردش‌کار برای آخرین نسخه، هم‌شماره با گیت‌هاب و مارکت‌پلیس، اجرا می‌شود. گزینهٔ `publish` پیش‌فرض روشن است: همان تست‌ها و بیلد مشترک اجرا می‌شوند، سپس VSIX بررسی‌شده با Trusted Publishing منتشر می‌شود. نسخهٔ تازه اول چند دقیقه در بازبینی می‌ماند و در فهرست عمومی نیست؛ بررسی انتشار هر ۲۰ ثانیه رجیستری را می‌بیند و به محض عمومی شدن، فایل دریافت‌شده را با خروجی بیلد تطبیق می‌دهد. برای آزمون ساخت بدون انتشار، گزینهٔ `publish` را خاموش کنید.
 
 یک‌بار در [Trusted Publishers](https://open-vsx.org/user-settings/trusted-publishers)، ارائه‌دهندهٔ GitHub Actions را برای افزونهٔ `fusoft.rtl-cursor` با این مشخصات ثبت کنید:
 
@@ -41,7 +43,7 @@ git push origin v1.0.18
 
 ## انتشار اختصاصی در Visual Studio Marketplace
 
-گردش‌کار جداگانهٔ [Publish to Visual Studio Marketplace](https://github.com/Fusoft-External/rtl-cursor/actions/workflows/publish-marketplace.yml) فقط با **Run workflow** اجرا می‌شود و به تگ نسخه یا ریلیز گیت‌هاب وصل نیست. گزینهٔ `publish` پیش‌فرض روشن است: همان تست‌ها و بیلد مشترک اجرا می‌شوند، سپس VSIX بررسی‌شده با Trusted Publishing منتشر می‌شود. برای آزمون ساخت بدون انتشار، گزینهٔ `publish` را خاموش کنید.
+گردش‌کار [Publish to Visual Studio Marketplace](https://github.com/Fusoft-External/rtl-cursor/actions/workflows/publish-marketplace.yml) با **Run workflow** اجرا می‌شود. با فرمان `cicd` همین گردش‌کار برای آخرین نسخه، هم‌شماره با گیت‌هاب و Open VSX، اجرا می‌شود. گزینهٔ `publish` پیش‌فرض روشن است: همان تست‌ها و بیلد مشترک اجرا می‌شوند، سپس VSIX بررسی‌شده با Trusted Publishing منتشر می‌شود. برای آزمون ساخت بدون انتشار، گزینهٔ `publish` را خاموش کنید. فایل گردش‌کار باید همین نام بماند؛ سیاست Trusted Publishing به نام فایل و محیط `marketplace` وصل است.
 
 یک‌بار در [Trusted Publishing](https://marketplace.visualstudio.com/manage/publishers/fusoft/trustedpublishing) برای ناشر `fusoft` این سیاست را ثبت کنید:
 

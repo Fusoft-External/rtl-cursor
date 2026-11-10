@@ -28,8 +28,13 @@ After completing a release version:
    the release link. Do not replace an existing published version or move an
    existing tag; inspect any collision first.
 
-GitHub release publication is authorized by this workflow. Publishing to the
-Visual Studio Marketplace is a separate action and needs its own user request.
+GitHub release publication is authorized by this workflow. When the user says
+`cicd`, publish the latest version to GitHub, Open VSX, and the Visual Studio
+Marketplace. Cursor installs from Open VSX and VS Code from the Marketplace, so
+that latest number must be the same in every place. Do not publish a different
+number to one registry, and do not backfill older missing numbers unless the
+user asks. A change that only runs in one editor still ships as that one latest
+version. Skip a registry only when the user explicitly says to skip it.
 Use existing Git/GitHub authentication without printing or committing secrets.
 If authentication or access blocks publication, keep the completed local work
 and report exactly which remaining step needs attention.
@@ -40,29 +45,34 @@ commit. Actions runs all checks, builds and inspects the VSIX from the tagged
 source, and publishes the three required assets with notes from `readme.md`.
 The local VSIX build/commit steps above apply to manual packaging; the CI-built
 VSIX is authoritative for automated releases. Its main/PR/manual runs only upload
-build artifacts and do not publish or replace an existing release. CI-only
-changes do not require changing the extension version or moving its current tag.
+build artifacts and do not publish or replace an existing release. A version tag
+publishes the GitHub release only. CI-only changes do not require changing the
+extension version or moving its current tag.
 
-For an explicit Open VSX build/publish request, use the separate manual workflow
-`.github/workflows/publish-openvsx.yml` with `publish=true`. Use `publish=false`
-only for a build-only validation. It shares `.github/workflows/build-vsix.yml`
-with GitHub releases, then publishes that exact VSIX using OIDC in the `openvsx`
+The command `cicd` is what publishes the latest version to all three places.
+Push the version tag, let `.github/workflows/build-release.yml` create the
+GitHub release, then run `.github/workflows/publish-openvsx.yml` and
+`.github/workflows/publish-marketplace.yml` for that same tag with
+`publish=true`. Confirm all three when they finish. Do not run a registry
+workflow again for a version it already has. Use `publish=false` only for a
+build-only check. Keep the OIDC publish steps in their own workflow files. The
+trusted publisher policies are bound to those filenames; moving the publish
+commands into `build-release.yml` breaks publication.
+
+Open VSX uses `.github/workflows/publish-openvsx.yml` and the `openvsx`
 environment. The Trusted Publisher registration must name `Fusoft-External`,
 `rtl-cursor`, `publish-openvsx.yml`, and environment `openvsx`, for extension
 `fusoft.rtl-cursor`. Do not add or request a long-lived Open VSX token. Never
 delete an Open VSX version to reuse its number: deleted numbers stay reserved.
 
-For an explicit Visual Studio Marketplace build/publish request, use the
-separate manual workflow `.github/workflows/publish-marketplace.yml` with
-`publish=true`. Use `publish=false` only for a build-only validation. It shares
-`.github/workflows/build-vsix.yml`, then publishes that exact VSIX with
-`vsce publish --packagePath --oidc` in the `marketplace` environment. The
-Trusted Publishing policy must name repository owner `Fusoft-External`,
-repository `rtl-cursor`, workflow `publish-marketplace.yml`, and environment
-`marketplace`, for publisher `fusoft`. Do not add or request a Marketplace PAT.
-`@vscode/vsce` in `.github/ci` must stay on a release that supports `--oidc`
-(currently 4.1.0). An existing Marketplace version is not republished. A normal
-GitHub release does not run this workflow.
+The Visual Studio Marketplace uses `.github/workflows/publish-marketplace.yml`
+and the `marketplace` environment. It publishes with
+`vsce publish --packagePath --oidc`. The Trusted Publishing policy must name
+repository owner `Fusoft-External`, repository `rtl-cursor`, workflow
+`publish-marketplace.yml`, and environment `marketplace`, for publisher
+`fusoft`. Do not add or request a Marketplace PAT. `@vscode/vsce` in
+`.github/ci` must stay on a release that supports `--oidc` (currently 4.1.0).
+An existing Marketplace version is not republished.
 
 ## Repository notes
 
