@@ -5,9 +5,10 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const { checkVersion } = require("../.github/scripts/openvsx-version.cjs");
+const { version } = require("../package.json");
 
-const versionUrl = "https://open-vsx.org/api/fusoft/rtl-cursor/1.0.18";
-const downloadUrl = "https://open-vsx.org/api/fusoft/rtl-cursor/1.0.18/file/fusoft.rtl-cursor-1.0.18.vsix";
+const versionUrl = "https://open-vsx.org/api/fusoft/rtl-cursor/" + version;
+const downloadUrl = "https://open-vsx.org/api/fusoft/rtl-cursor/" + version + "/file/fusoft.rtl-cursor-" + version + ".vsix";
 
 function response(status, body, bytes) {
     return {
@@ -22,7 +23,7 @@ function published(bytes) {
     return response(200, {
         namespace: "fusoft",
         name: "rtl-cursor",
-        version: "1.0.18",
+        version,
         files: { download: downloadUrl }
     }, bytes);
 }
