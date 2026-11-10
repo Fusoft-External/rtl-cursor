@@ -81,7 +81,7 @@
 	},
 	"scripts": {
 		"package": "vsce package --no-dependencies --allow-missing-repository",
-		"test": "node --test tests/extension-restart.test.cjs tests/runtime-fonts.test.cjs tests/runtime-vscode.test.cjs tests/native-chat.test.cjs",
+		"test": "node --test tests/extension-restart.test.cjs tests/runtime-fonts.test.cjs tests/runtime-vscode.test.cjs tests/native-chat.test.cjs tests/openvsx-version.test.cjs",
 		"test:browser": "node --test tests/runtime-vscode-browser.test.cjs tests/native-chat-browser.test.cjs tests/human-bubble-side.test.cjs",
 		"test:watcher": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tests/watcher.test.ps1",
 		"test:migration": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tests/migration.test.ps1"

@@ -23,7 +23,7 @@ jobs:
     if: inputs.publish
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     environment: openvsx
     permissions:
       contents: read
@@ -51,5 +51,5 @@ jobs:
         run: npm ci --prefix .github/ci --no-audit --no-fund
       - name: Publish the validated VSIX with OIDC
         run: node .github/ci/node_modules/ovsx/bin/ovsx publish "release-assets/rtl-cursor-$RELEASE_VERSION.vsix" --trusted-publishing
-      - name: Verify the registry download matches this build
+      - name: Wait until the publish is public, then match the download
         run: node .github/scripts/openvsx-version.cjs verify "release-assets/rtl-cursor-$RELEASE_VERSION.vsix"
