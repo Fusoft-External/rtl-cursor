@@ -5,6 +5,7 @@ const manifest = require("../../package.json");
 
 const LISTING_WAIT_MS = 6 * 60 * 1000;
 const LISTING_POLL_MS = 20 * 1000;
+const QUERY_TIMEOUT_MS = 90 * 1000;
 const QUERY_URL = "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery?api-version=3.0-preview.1";
 const VSIX_ASSET = "Microsoft.VisualStudio.Services.VSIXPackage";
 const QUERY_FLAGS = 0x1 | 0x2 | 0x80;
@@ -37,30 +38,33 @@ async function checkVersion(mode, packagePath, request = fetch, options = {}) {
     const { publisher, name, version } = manifest;
     const waitMs = options.waitMs ?? (mode === "verify" ? LISTING_WAIT_MS : 0);
     const pollMs = options.pollMs ?? LISTING_POLL_MS;
+    const queryTimeoutMs = options.queryTimeoutMs ?? QUERY_TIMEOUT_MS;
     const pause = options.sleep ?? sleep;
     const started = Date.now();
-    const query = {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json;api-version=3.0-preview.1"
-        },
-        body: JSON.stringify({
-            filters: [{
-                criteria: [{ filterType: 7, value: publisher + "." + name }],
-                pageNumber: 1,
-                pageSize: 1
-            }],
-            flags: QUERY_FLAGS
-        }),
-        signal: AbortSignal.timeout(30000)
-    };
+    const queryBody = JSON.stringify({
+        filters: [{
+            criteria: [{ filterType: 7, value: publisher + "." + name }],
+            pageNumber: 1,
+            pageSize: 1
+        }],
+        flags: QUERY_FLAGS
+    });
 
     let match;
     while (true) {
         let response;
         try {
-            response = await request(QUERY_URL, query);
+            // A fresh timeout per attempt: reusing one aborted AbortSignal makes
+            // every later GitHub-hosted lookup fail immediately.
+            response = await request(QUERY_URL, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Accept: "application/json;api-version=3.0-preview.1"
+                },
+                body: queryBody,
+                signal: AbortSignal.timeout(queryTimeoutMs)
+            });
         } catch (error) {
             response = null;
             console.log("Marketplace lookup did not answer (" + error.message + "); still waiting for the public listing");

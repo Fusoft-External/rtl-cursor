@@ -23,7 +23,7 @@ jobs:
     if: inputs.publish
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     environment: marketplace
     permissions:
       contents: read

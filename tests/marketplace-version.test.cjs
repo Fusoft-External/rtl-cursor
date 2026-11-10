@@ -73,6 +73,30 @@ test("a public file that differs from the build still fails", async () => {
     );
 });
 
+test("verification retries with a new timeout after an aborted gallery lookup", async () => {
+    const bytes = Buffer.from("marketplace-vsix");
+    const file = path.join(os.tmpdir(), "rtl-marketplace-retry.vsix");
+    fs.writeFileSync(file, bytes);
+    const signals = [];
+    let lookups = 0;
+    const message = await checkVersion("verify", file, async (url, options = {}) => {
+        if (url === queryUrl) {
+            signals.push(options.signal);
+            if (lookups++ === 0) {
+                const err = new Error("The operation was aborted due to timeout");
+                err.name = "TimeoutError";
+                throw err;
+            }
+            return listing(bytes);
+        }
+        return response(200, null, bytes);
+    }, { waitMs: 1000, pollMs: 1, sleep: async () => {} });
+    assert.equal(lookups, 2);
+    assert.equal(signals.length, 2);
+    assert.notEqual(signals[0], signals[1], "A timed-out AbortSignal must not be reused for the next lookup");
+    assert.ok(message.includes("fusoft.rtl-cursor"));
+});
+
 test("verification fails only after the listing wait stays unpublished", async () => {
     let lookups = 0;
     await assert.rejects(
