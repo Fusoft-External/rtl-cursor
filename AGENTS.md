@@ -52,6 +52,18 @@ environment. The Trusted Publisher registration must name `Fusoft-External`,
 `fusoft.rtl-cursor`. Do not add or request a long-lived Open VSX token. Never
 delete an Open VSX version to reuse its number: deleted numbers stay reserved.
 
+For an explicit Visual Studio Marketplace build/publish request, use the
+separate manual workflow `.github/workflows/publish-marketplace.yml` with
+`publish=true`. Use `publish=false` only for a build-only validation. It shares
+`.github/workflows/build-vsix.yml`, then publishes that exact VSIX with
+`vsce publish --packagePath --oidc` in the `marketplace` environment. The
+Trusted Publishing policy must name repository owner `Fusoft-External`,
+repository `rtl-cursor`, workflow `publish-marketplace.yml`, and environment
+`marketplace`, for publisher `fusoft`. Do not add or request a Marketplace PAT.
+`@vscode/vsce` in `.github/ci` must stay on a release that supports `--oidc`
+(currently 4.1.0). An existing Marketplace version is not republished. A normal
+GitHub release does not run this workflow.
+
 ## Repository notes
 
 - The shipped extension entry point is `dist/extension.js`; this checkout does

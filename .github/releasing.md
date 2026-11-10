@@ -39,4 +39,19 @@ git push origin v1.0.18
 
 نسخهٔ موجود دوباره منتشر نمی‌شود؛ شمارهٔ بسته و لودر و یادداشت‌های انتشار را پیش از انتشار بعدی به نسخه‌ای تازه تغییر دهید. در Open VSX حتی حذف یک نسخه هم شمارهٔ آن را آزاد نمی‌کند.
 
+## انتشار اختصاصی در Visual Studio Marketplace
+
+گردش‌کار جداگانهٔ [Publish to Visual Studio Marketplace](https://github.com/Fusoft-External/rtl-cursor/actions/workflows/publish-marketplace.yml) فقط با **Run workflow** اجرا می‌شود و به تگ نسخه یا ریلیز گیت‌هاب وصل نیست. گزینهٔ `publish` پیش‌فرض روشن است: همان تست‌ها و بیلد مشترک اجرا می‌شوند، سپس VSIX بررسی‌شده با Trusted Publishing منتشر می‌شود. برای آزمون ساخت بدون انتشار، گزینهٔ `publish` را خاموش کنید.
+
+یک‌بار در [Trusted Publishing](https://marketplace.visualstudio.com/manage/publishers/fusoft/trustedpublishing) برای ناشر `fusoft` این سیاست را ثبت کنید:
+
+| تنظیم | مقدار |
+| --- | --- |
+| Repository owner | `Fusoft-External` |
+| Repository | `rtl-cursor` |
+| Workflow | `publish-marketplace.yml` |
+| Environment | `marketplace` |
+
+گردش‌کار از محیط گیت‌هاب `marketplace` و مجوز `id-token: write` استفاده می‌کند. نیازی به PAT یا Secret نیست. ابزار انتشار `@vscode/vsce` نسخهٔ `4.1.0` در `.github/ci` است و دستور انتشار `vsce publish --packagePath --oidc` است. پیش از انتشار، رجیستری برای همان شمارهٔ نسخه بررسی می‌شود و نسخهٔ موجود دوباره فرستاده نمی‌شود. پس از انتشار، فایل عمومی با خروجی بیلد مقایسه می‌شود.
+
 </div>
