@@ -31,6 +31,7 @@ function createHarness(options = {}) {
     [windowsPath.join(home, ".rtl-cursor-enabled"), "1"],
     [windowsPath.join(extensionPath, "resources", "rtl-cursor-watch.ps1"), "# bundled watcher\n"],
     [windowsPath.join(extensionPath, "resources", "rtl-cursor-watch.vbs"), "' bundled launcher\n"],
+    [windowsPath.join(extensionPath, "resources", "rtl-cursor-watch-host.exe"), "MZ"],
     [windowsPath.join(extensionPath, "resources", "rtl-cursor-loader.cjs"), "// bundled loader\n"]
   ]);
   const timestamps = new Map();
@@ -269,7 +270,7 @@ function verifyMigrationWithMockProcesses(script, fakeProcesses, expectedStopped
     "$global:fakeStopped = @()",
     "$global:fakeHelper = [pscustomobject]@{}",
     "$global:fakeHelper | Add-Member -MemberType ScriptMethod -Name WaitForExit -Value { param($timeout) $true }",
-    "function Get-CimInstance { param($ClassName, $Filter); if ($ClassName -ne 'Win32_Process') { throw 'Unexpected process query' }; if ($Filter -match '^ProcessId=(\\d+)$') { return @($global:fakeProcesses | Where-Object { $_.ProcessId -eq [int]$matches[1] }) }; return $global:fakeProcesses }",
+    "function Get-CimInstance { param($ClassName, $Filter); if ($ClassName -ne 'Win32_Process') { throw 'Unexpected process query' }; if ($Filter -match '^ProcessId=(\\d+)$') { return @($global:fakeProcesses | Where-Object { $_.ProcessId -eq [int]$matches[1] }) }; if ($Filter -match \"Name = '([^']+)'\") { return @($global:fakeProcesses | Where-Object { $_.Name -eq $matches[1] }) }; return $global:fakeProcesses }",
     "function Get-Process { param($Id, $ErrorAction); if ($Id -notin $global:expectedStopped) { throw 'Unrelated process was queried for stopping' }; return $global:fakeHelper }",
     "function Stop-Process { param($Id, [switch]$Force, $ErrorAction); $global:fakeStopped += $Id; $global:fakeProcesses = @($global:fakeProcesses | Where-Object { $_.ProcessId -ne $Id }) }",
     "$script = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($env:RTL_TEST_SCRIPT_B64))",
@@ -357,24 +358,14 @@ test("autoRelaunch false keeps the editor open after automatic RTL repair", asyn
   assert.equal(harness.spawnCalls.some((call) => call.args.includes("-EncodedCommand") && decodePowerShell(call).includes("Start-Process")), false);
 });
 
-test("updated watcher installation verifies helper identity before migrating its PID", async () => {
+test("updated watcher installation copies the new script without launching a console helper", async () => {
   const harness = createHarness();
   harness.setFile(watchScriptPath, "# old watcher\n");
   harness.setFile(watchPidPath, "9876");
   await harness.sandbox.installBackgroundWatch(extensionPath);
-  const migration = harness.execCalls.find((call) => call.command === "powershell.exe");
-  assert.ok(migration, "The old watcher was examined before copying the replacement");
-  const script = decodePowerShell(migration);
-  validatePowerShell(script);
-  assert.match(script, /Get-CimInstance\s+Win32_Process/);
-  assert.match(script, /\$_.Name\s+-eq\s+'powershell.exe'/);
-  assert.match(script, /\$_.CommandLine\s+-match/);
-  assert.ok(script.includes(watchScriptPath), "The exact managed watcher path identifies the process");
-  assert.match(script, /Stop-Process\s+-Id/);
-  assert.match(script, /WaitForExit\(5000\)/, "Replacement launch waits for old helper exit");
-  assert.doesNotMatch(script, /taskkill|Cursor\.exe/i);
+  assert.deepEqual(harness.execCalls, [], "A live Cursor session must not start powershell.exe to replace the watcher");
   assert.equal(harness.files.get(watchScriptPath), "# bundled watcher\n");
-  assert.equal(harness.files.has(watchPidPath), false);
+  assert.equal(harness.spawnCalls.some((call) => call.command === "wscript.exe"), true);
 });
 
 test("watcher migration never stops a reused PID belonging to an unrelated process", async () => {
@@ -394,24 +385,32 @@ test("malformed stored watcher PID cannot target a process or inject PowerShell"
   harness.setFile(watchScriptPath, "# old watcher\n");
   harness.setFile(watchPidPath, "9876; Stop-Process -Name Cursor");
   await harness.sandbox.installBackgroundWatch(extensionPath);
-  const script = decodePowerShell(harness.execCalls[0]);
-  assert.doesNotMatch(script, /Stop-Process -Name Cursor/, "A stored PID string never becomes executable code");
-  verifyMigrationWithMockProcesses(script, [
-    { ProcessId: 9876, Name: "powershell.exe", CommandLine: `powershell.exe -File "${watchScriptPath}"` }
-  ], [9876]);
+  assert.deepEqual(harness.execCalls, [], "A malformed PID must not become a PowerShell command");
   assert.equal(harness.spawnCalls.some((call) => call.command.toLowerCase() === "taskkill"), false);
+  assert.equal(harness.files.get(watchPidPath), "9876; Stop-Process -Name Cursor");
 });
 
 test("watcher migration finds the managed helper when its PID file is missing", async () => {
   const harness = createHarness();
   harness.setFile(watchScriptPath, "# old watcher\n");
-  await harness.sandbox.installBackgroundWatch(extensionPath);
+  await harness.sandbox.stopManagedWatchProcess();
   const script = decodePowerShell(harness.execCalls[0]);
   verifyMigrationWithMockProcesses(script, [
     { ProcessId: 9876, Name: "powershell.exe", CommandLine: `powershell.exe -File "${watchScriptPath}"` },
     { ProcessId: 9877, Name: "powershell.exe", CommandLine: 'powershell.exe -File "C:\\other.ps1"' }
   ], [9876]);
-  assert.equal(harness.files.get(watchScriptPath), "# bundled watcher\n");
+});
+
+test("watcher migration stops the windowless host without touching unrelated processes", async () => {
+  const harness = createHarness();
+  harness.setFile(watchScriptPath, "# old watcher\n");
+  await harness.sandbox.stopManagedWatchProcess();
+  const script = decodePowerShell(harness.execCalls[0]);
+  verifyMigrationWithMockProcesses(script, [
+    { ProcessId: 9876, Name: "Cursor.exe", CommandLine: "Cursor.exe" },
+    { ProcessId: 9877, Name: "rtl-cursor-watch-host.exe", CommandLine: `rtl-cursor-watch-host.exe "${watchScriptPath}"` },
+    { ProcessId: 9878, Name: "rtl-cursor-watch-host.exe", CommandLine: 'rtl-cursor-watch-host.exe "C:\\other.ps1"' }
+  ], [9877]);
 });
 
 test("matching watcher content preserves an existing helper and synchronizes autoReapply", async () => {
@@ -442,6 +441,14 @@ test("a live watcher pid is not started again even without a lock file", async (
   await harness.sandbox.installBackgroundWatch(extensionPath);
   assert.deepEqual(harness.execCalls, []);
   assert.deepEqual(harness.spawnCalls, [], "A leftover watcher without watch.lock must not open a new console");
+});
+
+test("an unknown lock error is treated as a running watcher", async () => {
+  const harness = createHarness({ lockCode: "UNKNOWN" });
+  harness.setFile(watchScriptPath, "# bundled watcher\n");
+  harness.setFile(windowsPath.join(stateDir, "watch.lock"), "held");
+  await harness.sandbox.installBackgroundWatch(extensionPath);
+  assert.deepEqual(harness.spawnCalls, [], "Electron lock errors must not launch a console helper");
 });
 
 test("configuration changes immediately synchronize autoReapply with the background watcher", async () => {

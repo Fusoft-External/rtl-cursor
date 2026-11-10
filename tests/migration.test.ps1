@@ -50,6 +50,8 @@ function Get-CimInstance {
     param([string]$ClassName, [string]$Filter)
     if ($Filter -eq "Name = 'powershell.exe'") {
         $script:processes | Where-Object { $_.Name -eq "powershell.exe" }
+    } elseif ($Filter -eq "Name = 'rtl-cursor-watch-host.exe'") {
+        $script:processes | Where-Object { $_.Name -eq "rtl-cursor-watch-host.exe" }
     } elseif ($Filter -match '^ProcessId=(\d+)$') {
         $process = @($script:processes | Where-Object { $_.ProcessId -eq [int]$Matches[1] }) | Select-Object -First 1
         if ($script:reuseProcessId -and $process.ProcessId -eq 101) {
@@ -103,7 +105,7 @@ function New-FixtureExtension([string]$version, [string]$publisher = "fusoft") {
     $path = Join-Path $extensionRoot ("fusoft.rtl-cursor-" + $version)
     New-Item -ItemType Directory -Path (Join-Path $path "resources") -Force | Out-Null
     [System.IO.File]::WriteAllText((Join-Path $path "package.json"), ('{"name":"rtl-cursor","publisher":"' + $publisher + '","version":"' + $version + '"}'))
-    foreach ($name in @("rtl-cursor-watch.ps1", "rtl-cursor-watch.vbs", "rtl-cursor-loader.cjs")) {
+    foreach ($name in @("rtl-cursor-watch.ps1", "rtl-cursor-watch.vbs", "rtl-cursor-watch-host.exe", "rtl-cursor-loader.cjs")) {
         [System.IO.File]::WriteAllBytes((Join-Path $path ("resources\" + $name)), [System.IO.File]::ReadAllBytes((Join-Path $repositoryRoot ("resources\" + $name))))
     }
     return $path
@@ -111,7 +113,7 @@ function New-FixtureExtension([string]$version, [string]$publisher = "fusoft") {
 function Reset-Fixture {
     [System.IO.File]::WriteAllText($flagPath, "keep enabled")
     [System.IO.File]::WriteAllText($settingsPath, '{"autoReapply":false,"autoRelaunch":false,"custom":"preserve exactly"}')
-    foreach ($name in @("rtl-cursor-watch.ps1", "rtl-cursor-watch.vbs", "rtl-cursor-loader.cjs")) {
+    foreach ($name in @("rtl-cursor-watch.ps1", "rtl-cursor-watch.vbs", "rtl-cursor-watch-host.exe", "rtl-cursor-loader.cjs")) {
         [System.IO.File]::WriteAllText((Join-Path $fixtureState $name), "old content: $name")
     }
     [System.IO.File]::WriteAllText((Join-Path $fixtureState "watch.pid"), "303")
@@ -159,7 +161,7 @@ try {
     Assert-True ($result.Version -eq "1.0.13") "explicit installed extension must select requested version"
     Assert-True ($script:stopped.Count -eq 1 -and $script:stopped[0] -eq 101) "only exact-path managed watcher may be stopped, independent of stale PID file"
     Assert-True (@($script:processes | Where-Object { $_.ProcessId -eq 202 -or $_.ProcessId -eq 303 }).Count -eq 2) "other PowerShell session and Cursor must remain untouched"
-    foreach ($name in @("rtl-cursor-watch.ps1", "rtl-cursor-watch.vbs", "rtl-cursor-loader.cjs")) {
+    foreach ($name in @("rtl-cursor-watch.ps1", "rtl-cursor-watch.vbs", "rtl-cursor-watch-host.exe", "rtl-cursor-loader.cjs")) {
         Assert-True (([Convert]::ToBase64String([System.IO.File]::ReadAllBytes((Join-Path $fixtureState $name)))) -eq
             ([Convert]::ToBase64String([System.IO.File]::ReadAllBytes((Join-Path $releaseExtension ("resources\" + $name)))))) "all managed resources must be atomically deployed"
     }
@@ -285,7 +287,7 @@ try {
         $rejected = $false
         try { Update-AgentWatcher $fixtureHome $releaseExtension | Out-Null } catch { $rejected = $true }
         Assert-True ($rejected -and $script:launches.Count -eq 0) "partial deployment failure must abort watcher launch"
-        foreach ($name in @("rtl-cursor-watch.ps1", "rtl-cursor-watch.vbs", "rtl-cursor-loader.cjs")) {
+        foreach ($name in @("rtl-cursor-watch.ps1", "rtl-cursor-watch.vbs", "rtl-cursor-watch-host.exe", "rtl-cursor-loader.cjs")) {
             Assert-True (([System.IO.File]::ReadAllText((Join-Path $fixtureState $name))) -eq "old content: $name") "partial deployment must restore original managed resources"
         }
     } finally { Set-Item -LiteralPath Function:\Publish-WatcherFileStage -Value $originalPublish }
@@ -303,7 +305,7 @@ try {
         $rejected = $false
         try { Update-AgentWatcher $fixtureHome $releaseExtension $fixtureRoaming | Out-Null } catch { $rejected = $true }
         Assert-True ($rejected -and $script:launches.Count -eq 0 -and -not (Test-Path -LiteralPath $settingsPath)) "partial migration must roll back newly initialized preferences with other resources"
-        foreach ($name in @("rtl-cursor-watch.ps1", "rtl-cursor-watch.vbs", "rtl-cursor-loader.cjs")) {
+        foreach ($name in @("rtl-cursor-watch.ps1", "rtl-cursor-watch.vbs", "rtl-cursor-watch-host.exe", "rtl-cursor-loader.cjs")) {
             Assert-True (([System.IO.File]::ReadAllText((Join-Path $fixtureState $name))) -eq "old content: $name") "preference publication failure must restore original watcher files"
         }
     } finally { Set-Item -LiteralPath Function:\Publish-WatcherFileStage -Value $originalPublish }

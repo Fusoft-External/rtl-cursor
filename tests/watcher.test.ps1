@@ -2,6 +2,17 @@
 # dot-source the watcher, read the user's Cursor files, or control real processes.
 $ErrorActionPreference = "Stop"
 $watcherPath = Join-Path (Split-Path -Parent $PSScriptRoot) "resources\rtl-cursor-watch.ps1"
+$vbsPath = Join-Path (Split-Path -Parent $PSScriptRoot) "resources\rtl-cursor-watch.vbs"
+$vbs = [System.IO.File]::ReadAllText($vbsPath)
+if ($vbs -notmatch 'rtl-cursor-watch-host\.exe') { throw "launcher must start the Windows-subsystem host so the helper has no console" }
+if ($vbs -match '16777224|CreateFlags\s*=\s*8\b') { throw "DETACHED_PROCESS must not be used; powershell exits immediately" }
+if ($vbs -notmatch 'StartWatcherViaWmi') { throw "WMI powershell remains the fallback when the windowless host is missing" }
+$hostCsPath = Join-Path (Split-Path -Parent $PSScriptRoot) "resources\rtl-cursor-watch-host.cs"
+$hostCs = [System.IO.File]::ReadAllText($hostCsPath)
+if ($hostCs -notmatch 'target:winexe') { throw "watch host must compile as a Windows-subsystem executable" }
+if ($hostCs -notmatch 'STAThread') { throw "watch host must run the PowerShell runspace as STA" }
+$hostExePath = Join-Path (Split-Path -Parent $PSScriptRoot) "resources\rtl-cursor-watch-host.exe"
+if (-not (Test-Path -LiteralPath $hostExePath)) { throw "watch host executable is missing" }
 $tokens = $null
 $parseErrors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseFile($watcherPath, [ref]$tokens, [ref]$parseErrors)

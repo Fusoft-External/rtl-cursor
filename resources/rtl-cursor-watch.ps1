@@ -1,7 +1,7 @@
 # RTL Cursor background watch — re-applies main.js patch after Cursor updates
 # without needing the full IDE / extension host (so Agent Window works too).
-# Launch via rtl-cursor-watch.vbs (WScript Run 0) so Windows Terminal does not
-# flash an empty console at logon even with WindowStyle Hidden.
+# Launch via rtl-cursor-watch.vbs -> rtl-cursor-watch-host.exe so the helper
+# is a Windows-subsystem process with no console.
 $ErrorActionPreference = "SilentlyContinue"
 try {
     Add-Type @"
@@ -9,10 +9,12 @@ using System;
 using System.Runtime.InteropServices;
 public static class RtlCursorNative {
     [DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
+    [DllImport("kernel32.dll")] public static extern bool FreeConsole();
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 }
 "@
     [void][RtlCursorNative]::ShowWindow([RtlCursorNative]::GetConsoleWindow(), 0)
+    [void][RtlCursorNative]::FreeConsole()
 } catch {}
 
 $homeDir = $env:USERPROFILE

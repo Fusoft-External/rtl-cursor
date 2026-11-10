@@ -69,6 +69,9 @@ function watchScriptPath() {
 function watchVbsPath() {
   return pathUser.join(watchStateDir(), "rtl-cursor-watch.vbs");
 }
+function watchHostPath() {
+  return pathUser.join(watchStateDir(), "rtl-cursor-watch-host.exe");
+}
 function watchLoaderCachePath() {
   return pathUser.join(watchStateDir(), "rtl-cursor-loader.cjs");
 }
@@ -493,7 +496,7 @@ async function stopManagedWatchProcess() {
   const pidFile = pathUser.join(watchStateDir(), "watch.pid");
   const scriptPath = watchScriptPath().replace(/'/g, "''");
   // The PID file may be stale or missing. Identify only our exact script before stopping any helper.
-  await runHiddenPowerShell(`$ErrorActionPreference='Stop'; $pattern='(?i)(?:^|\\s)-File\\s+"?' + [regex]::Escape('${scriptPath}') + '"?(?:\\s|$)'; $watchers=@(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" | Where-Object { $_.Name -eq 'powershell.exe' -and $_.CommandLine -match $pattern }); foreach ($watcher in $watchers) { $current=Get-CimInstance Win32_Process -Filter ('ProcessId=' + $watcher.ProcessId); if (-not $current -or $current.Name -ne 'powershell.exe' -or $current.CommandLine -notmatch $pattern -or $current.CreationDate -ne $watcher.CreationDate) { continue }; $helper=Get-Process -Id $watcher.ProcessId -ErrorAction SilentlyContinue; if ($helper) { Stop-Process -Id $watcher.ProcessId -Force -ErrorAction Stop; if (-not $helper.WaitForExit(5000)) { throw 'RTL watcher did not stop' } } }; $remaining=@(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" | Where-Object { $_.Name -eq 'powershell.exe' -and $_.CommandLine -match $pattern }); if ($remaining.Count -gt 0) { throw 'RTL watcher replacement deferred: old watcher is still running' }`);
+  await runHiddenPowerShell(`$ErrorActionPreference='Stop'; $scriptPath='${scriptPath}'; $escaped=[regex]::Escape($scriptPath); $filePattern='(?i)(?:^|\\s)-File\\s+"?' + $escaped + '"?(?:\\s|$)'; function Test-RtlWatchProcess($proc) { if (-not $proc -or [int]$proc.ProcessId -le 0) { return $false }; $cmd=[string]$proc.CommandLine; $name=[string]$proc.Name; if ($name -eq 'powershell.exe' -and $cmd -match $filePattern) { return $true }; if ($name -eq 'rtl-cursor-watch-host.exe' -and $cmd -match $escaped) { return $true }; return $false }; $watchers=@(); $watchers+=@(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" | Where-Object { Test-RtlWatchProcess $_ }); $watchers+=@(Get-CimInstance Win32_Process -Filter "Name = 'rtl-cursor-watch-host.exe'" | Where-Object { Test-RtlWatchProcess $_ }); foreach ($watcher in $watchers) { $current=Get-CimInstance Win32_Process -Filter ('ProcessId=' + $watcher.ProcessId); if (-not (Test-RtlWatchProcess $current) -or $current.CreationDate -ne $watcher.CreationDate) { continue }; $helper=Get-Process -Id $watcher.ProcessId -ErrorAction SilentlyContinue; if ($helper) { Stop-Process -Id $watcher.ProcessId -Force -ErrorAction Stop; if (-not $helper.WaitForExit(5000)) { throw 'RTL watcher did not stop' } } }; $remaining=@(); $remaining+=@(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" | Where-Object { Test-RtlWatchProcess $_ }); $remaining+=@(Get-CimInstance Win32_Process -Filter "Name = 'rtl-cursor-watch-host.exe'" | Where-Object { Test-RtlWatchProcess $_ }); if ($remaining.Count -gt 0) { throw 'RTL watcher replacement deferred: old watcher is still running' }`);
   try { fs3.unlinkSync(pidFile); } catch {}
 }
 function watcherLockHeld(scriptPath) {
@@ -504,8 +507,7 @@ function watcherLockHeld(scriptPath) {
     handle = fs3.openSync(lockPath, "r");
     return false;
   } catch (err) {
-    const code = err && err.code;
-    return code === "EBUSY" || code === "EPERM" || code === "EACCES";
+    return !err || err.code !== "ENOENT";
   } finally {
     if (handle !== void 0) {
       try { fs3.closeSync(handle); } catch {}
@@ -520,7 +522,9 @@ function watcherPidAlive(scriptPath) {
     process.kill(pid, 0);
     return true;
   } catch (err) {
-    return !!(err && err.code === "EPERM");
+    const code = err && err.code;
+    if (code === "ESRCH" || code === "ENOENT") return false;
+    return true;
   }
 }
 async function installBackgroundWatch(extensionPath) {
@@ -537,38 +541,30 @@ async function installBackgroundWatchNow(extensionPath) {
     syncWatchSettings();
     const srcScript = pathUser.join(extensionPath, "resources", "rtl-cursor-watch.ps1");
     const srcVbs = pathUser.join(extensionPath, "resources", "rtl-cursor-watch.vbs");
+    const srcHost = pathUser.join(extensionPath, "resources", "rtl-cursor-watch-host.exe");
     const srcLoader = pathUser.join(extensionPath, "resources", LOADER_FILENAME);
-    if (fs3.existsSync(srcScript) && fs3.existsSync(watchScriptPath()) &&
-        !fs3.readFileSync(srcScript).equals(fs3.readFileSync(watchScriptPath()))) {
-      await stopManagedWatchProcess();
-    }
+    const script = watchScriptPath();
+    const alreadyRunning = watcherLockHeld(script) || watcherPidAlive(script);
     if (fs3.existsSync(srcScript)) {
-      copyAtomicFile(srcScript, watchScriptPath());
+      copyAtomicFile(srcScript, script);
     }
     if (fs3.existsSync(srcVbs)) {
       copyAtomicFile(srcVbs, watchVbsPath());
+    }
+    if (fs3.existsSync(srcHost)) {
+      copyAtomicFile(srcHost, watchHostPath());
     }
     if (fs3.existsSync(srcLoader)) {
       copyAtomicFile(srcLoader, watchLoaderCachePath());
     }
     const vbs = watchVbsPath();
-    const script = watchScriptPath();
     if (!fs3.existsSync(script)) {
       return;
     }
-    const runCmd = fs3.existsSync(vbs)
-      ? `wscript.exe //nologo //B "${vbs.replace(/"/g, '\\"')}"`
-      : `powershell.exe -NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "${script.replace(/"/g, '\\"')}"`;
+    if (alreadyRunning) return;
+    const runCmd = `wscript.exe //nologo //B "${(vbs || script).replace(/"/g, '\\"')}"`;
     // reg.exe is a console program and flashes a window. The windowless
     // launcher writes the same Run value itself.
-    if (!fs3.existsSync(vbs)) {
-      child_process.spawn(
-        "reg",
-        ["add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", WATCH_RUN_VALUE, "/t", "REG_SZ", "/d", runCmd, "/f"],
-        { detached: true, stdio: "ignore", windowsHide: true }
-      ).unref();
-    }
-    if (watcherLockHeld(script) || watcherPidAlive(script)) return;
     if (fs3.existsSync(vbs)) {
       child_process.spawn(
         "wscript.exe",
@@ -576,6 +572,11 @@ async function installBackgroundWatchNow(extensionPath) {
         { detached: true, stdio: "ignore", windowsHide: true }
       ).unref();
     } else {
+      child_process.spawn(
+        "reg",
+        ["add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", WATCH_RUN_VALUE, "/t", "REG_SZ", "/d", runCmd, "/f"],
+        { detached: true, stdio: "ignore", windowsHide: true }
+      ).unref();
       child_process.spawn(
         "powershell.exe",
         [

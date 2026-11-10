@@ -19,7 +19,7 @@ try {
     }
     foreach ($file in @('package.json', 'readme.md', 'dist/extension.js', 'dist/uninstall.js',
         'resources/rtl.js', 'resources/rtl-cursor-loader.cjs', 'resources/rtl-vscode-native.cjs',
-        'resources/rtl-cursor-watch.ps1', 'resources/rtl-cursor-watch.vbs',
+        'resources/rtl-cursor-watch.ps1', 'resources/rtl-cursor-watch.vbs', 'resources/rtl-cursor-watch-host.exe',
         'resources/markdown-preview-rtl.css', 'resources/icon.png', 'LICENSE.txt', 'NOTICE',
         'resources/fonts/OFL.txt', 'resources/fonts/Vazirmatn-Regular.ttf', 'resources/fonts/Vazirmatn-Bold.ttf')) {
         $entry = $archive.GetEntry("extension/$file")

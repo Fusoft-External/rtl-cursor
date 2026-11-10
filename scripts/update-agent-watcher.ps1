@@ -20,7 +20,7 @@ function Get-InstalledWatcherPackage([string]$candidatePath) {
     $version = [version]$manifest.version
     if ($version -lt [version]"1.0.13") { throw "Install RTL Cursor 1.0.13 or later before upgrading the watcher." }
     $files = @{}
-    foreach ($name in @("rtl-cursor-watch.ps1", "rtl-cursor-watch.vbs", "rtl-cursor-loader.cjs")) {
+    foreach ($name in @("rtl-cursor-watch.ps1", "rtl-cursor-watch.vbs", "rtl-cursor-watch-host.exe", "rtl-cursor-loader.cjs")) {
         $sourcePath = Join-Path $resolved ("resources\" + $name)
         $bytes = [System.IO.File]::ReadAllBytes($sourcePath)
         if ($bytes.Length -eq 0) { throw "The installed extension resource is empty: $name" }
@@ -50,16 +50,27 @@ function Find-InstalledWatcherPackage([string]$homeDirectory, [string]$requested
 }
 
 function Test-ManagedWatcherProcess($process, [string]$scriptPath) {
-    if (-not $process -or $process.Name -ine "powershell.exe" -or
-        -not $process.CreationDate -or [int]$process.ProcessId -le 0) { return $false }
+    if (-not $process -or -not $process.CreationDate -or [int]$process.ProcessId -le 0) { return $false }
+    $cmd = [string]$process.CommandLine
+    $name = [string]$process.Name
     $escapedPath = [regex]::Escape($scriptPath)
-    $pattern = '(?i)(?:^|\s)-File\s+(?:"' + $escapedPath + '"|' + $escapedPath + ')(?:\s|$)'
-    return ([string]$process.CommandLine -match $pattern)
+    if ($name -ieq "powershell.exe") {
+        $pattern = '(?i)(?:^|\s)-File\s+(?:"' + $escapedPath + '"|' + $escapedPath + ')(?:\s|$)'
+        return ($cmd -match $pattern)
+    }
+    if ($name -ieq "rtl-cursor-watch-host.exe") {
+        return ($cmd -match $escapedPath)
+    }
+    return $false
 }
 
 function Get-ManagedWatcherProcesses([string]$scriptPath) {
-    Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction Stop |
-        Where-Object { Test-ManagedWatcherProcess $_ $scriptPath }
+    $watchers = @()
+    $watchers += @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction Stop |
+        Where-Object { Test-ManagedWatcherProcess $_ $scriptPath })
+    $watchers += @(Get-CimInstance Win32_Process -Filter "Name = 'rtl-cursor-watch-host.exe'" -ErrorAction Stop |
+        Where-Object { Test-ManagedWatcherProcess $_ $scriptPath })
+    $watchers
 }
 
 function Stop-ManagedWatcher([string]$scriptPath) {
@@ -203,7 +214,7 @@ function Update-AgentWatcher([string]$homeDirectory, [string]$requestedPath, [st
     New-Item -ItemType Directory -Path $stateDirectory -Force | Out-Null
     try {
         # Prepare all complete files before stopping any managed helper.
-        foreach ($name in @("rtl-cursor-watch.ps1", "rtl-cursor-watch.vbs", "rtl-cursor-loader.cjs", "watch-settings.json")) {
+        foreach ($name in @("rtl-cursor-watch.ps1", "rtl-cursor-watch.vbs", "rtl-cursor-watch-host.exe", "rtl-cursor-loader.cjs", "watch-settings.json")) {
             if (-not $files.ContainsKey($name)) { continue }
             $stage = New-WatcherFileStage (Join-Path $stateDirectory $name) $files[$name]
             if ($name -eq "watch-settings.json") { $stage.PreserveIfAppeared = $true }
