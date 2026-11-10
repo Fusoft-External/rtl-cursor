@@ -127,6 +127,16 @@
             flex-grow: 1 !important;
         }
 
+        /* Cursor pins the user's bubble with align-items:flex-end on a column
+           inside this shell. direction:rtl makes that end the physical left, so
+           a Persian message jumps to the left of the transcript. The shell stays
+           LTR; only the text inside the bubble gets its own dir. */
+        .human-message-with-todos-wrapper,
+        .composer-human-message-container,
+        .composer-human-message-container > div {
+            direction: ltr !important;
+        }
+
         .markdown-root ul,
         .markdown-root ol,
         .markdown-lexical-editor-container ul,
@@ -907,7 +917,6 @@
         '.composer-create-plan-todos-list',
         '.composer-create-plan-todo-item',
         '.composer-create-plan-todo-content',
-        '.human-message-with-todos-wrapper',
         '.composer-rendered-message [class*="todo" i][class*="row" i]',
         '.composer-rendered-message [class*="todo" i][class*="item" i]',
         '.composer-rendered-message [class*="todo" i][class*="text" i]',
