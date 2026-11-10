@@ -512,6 +512,17 @@ function watcherLockHeld(scriptPath) {
     }
   }
 }
+function watcherPidAlive(scriptPath) {
+  const pidFile = pathUser.join(pathUser.dirname(scriptPath), "watch.pid");
+  try {
+    const pid = Number.parseInt(String(fs3.readFileSync(pidFile, "utf8")).trim(), 10);
+    if (!Number.isInteger(pid) || pid <= 0) return false;
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return !!(err && err.code === "EPERM");
+  }
+}
 async function installBackgroundWatch(extensionPath) {
   if (process.platform !== "win32" || isVSCodeHost()) {
     return;
@@ -557,7 +568,7 @@ async function installBackgroundWatchNow(extensionPath) {
         { detached: true, stdio: "ignore", windowsHide: true }
       ).unref();
     }
-    if (watcherLockHeld(script)) return;
+    if (watcherLockHeld(script) || watcherPidAlive(script)) return;
     if (fs3.existsSync(vbs)) {
       child_process.spawn(
         "wscript.exe",

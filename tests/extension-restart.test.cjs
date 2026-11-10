@@ -185,7 +185,12 @@ function createHarness(options = {}) {
       platform: "win32", pid: 4567, ppid: 1234,
       execPath: "C:\\Program Files\\Cursor's app\\Cursor.exe",
       env: { VSCODE_PID: "1234", LOCALAPPDATA: windowsPath.join(home, "AppData", "Local") },
-      kill: (...args) => { throw new Error(`Attempted to kill a real process: ${args}`); }
+      kill: (pid, signal) => {
+        if (signal === 0 && options.alivePids && options.alivePids.includes(Number(pid))) return true;
+        const error = new Error(`ESRCH: ${pid}`);
+        error.code = "ESRCH";
+        throw error;
+      }
     },
     console: {
       log: (...args) => logs.push({ level: "log", args }),
@@ -428,6 +433,15 @@ test("a running watcher is not started again", async () => {
   await harness.sandbox.installBackgroundWatch(extensionPath);
   assert.deepEqual(harness.execCalls, []);
   assert.deepEqual(harness.spawnCalls, [], "No console or launcher process is created while the watcher holds its lock");
+});
+
+test("a live watcher pid is not started again even without a lock file", async () => {
+  const harness = createHarness({ alivePids: [9876] });
+  harness.setFile(watchScriptPath, "# bundled watcher\n");
+  harness.setFile(watchPidPath, "9876\n");
+  await harness.sandbox.installBackgroundWatch(extensionPath);
+  assert.deepEqual(harness.execCalls, []);
+  assert.deepEqual(harness.spawnCalls, [], "A leftover watcher without watch.lock must not open a new console");
 });
 
 test("configuration changes immediately synchronize autoReapply with the background watcher", async () => {

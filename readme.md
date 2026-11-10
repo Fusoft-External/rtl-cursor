@@ -29,7 +29,7 @@
 
 ### نصب آفلاین از طریق فایل VSIX:
 
-1. فایل `releases/rtl-cursor-1.0.20.vsix` را دانلود کنید (یا از [Releases گیت‌هاب](https://github.com/Fusoft-External/rtl-cursor/releases)).
+1. فایل `releases/rtl-cursor-1.0.21.vsix` را دانلود کنید (یا از [Releases گیت‌هاب](https://github.com/Fusoft-External/rtl-cursor/releases)).
 2. در ادیتور (VS Code، Cursor یا Antigravity IDE) کلیدهای **`Ctrl + Shift + P`** را فشار دهید.
 3. دستور **`Extensions: Install from VSIX...`** را جستجو و فایل VSIX را انتخاب کنید.
 4. روی دکمهٔ نوار وضعیت پایین صفحه کلیک کرده یا دستور **`RTL Cursor: Enable`** را اجرا نمایید.
@@ -84,6 +84,12 @@ powershell.exe -NoProfile -File .\update-agent-watcher.ps1
 - **بررسی لاگ‌ها:** گزارش لودر در `%USERPROFILE%\rtl-cursor.log` و گزارش مراقب پس‌زمینه در `%USERPROFILE%\rtl-cursor-watch.log` ذخیره می‌شود.
 
 ---
+
+## تغییرات نسخه ۱.۰.۲۱
+
+- اگر مراقب پس‌زمینه از قبل روشن باشد، حتی بدون فایل قفل، دوباره اجرا نمی‌شود و پنجرهٔ کنسول نمی‌آید.
+- شروع مراقب با `conhost --headless` است تا ویندوز ترمینال هم پنجره نسازد.
+- بعد از نصب یا ارتقا، یک‌بار بستن کامل کرسر کافی است؛ باز شدن‌های بعدی نباید کنسول داشته باشند.
 
 ## تغییرات نسخه ۱.۰.۲۰
 
